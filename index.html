@@ -1,0 +1,1188 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>作業員總生產時間分析</title>
+    <!-- 載入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 載入 SheetJS (xlsx) 用於 Excel/CSV 檔案讀取 -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+    
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        /* 字體與基礎設定 */
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background-color: #f3f4f6; /* Slate-100 */
+            color: #1f2937;
+        }
+
+        /* 自定義滾動條 */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #c7c7c7;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #a0a0a0;
+        }
+
+        /* 表格容器 */
+        .responsive-table-container {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            border-radius: 0.5rem; 
+            border: 1px solid #e5e7eb;
+            font-size: 1rem;
+        }
+        .responsive-table-container th, .responsive-table-container td {
+            padding: 0.75rem 1.25rem;
+        }
+        .responsive-table-container th {
+            font-size: 0.875rem; /* text-sm */
+        }
+        .responsive-table-container td {
+             font-size: 1rem; /* text-base */
+        }
+        
+
+        /* 檔案上傳輸入框隱藏 */
+        .custom-file-upload input[type="file"] {
+            display: none;
+        }
+
+        /* 上傳區塊互動效果 */
+        .custom-file-upload {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .custom-file-upload:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        /* --- 時程圖樣式優化 --- */
+        .timeline-bar-day, .timeline-bar-night {
+            height: 36px;
+            background-color: #f3f4f6;
+            border-radius: 8px;
+            overflow: visible; 
+            position: relative;
+            box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.06);
+            border: 1px solid #e5e7eb;
+            margin-top: 2.5rem;
+            margin-bottom: 0.5rem;
+        }
+        .timeline-bar-night {
+             background-color: #1f2937;
+             border: 1px solid #374151;
+        }
+
+        .timeline-segment {
+            position: absolute;
+            height: 100%;
+            transition: all 0.2s ease;
+        }
+
+        .timeline-segment.production-day {
+            background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
+            border-radius: 4px;
+            z-index: 5;
+            opacity: 0.95;
+            box-shadow: 0 2px 4px rgba(37, 99, 235, 0.3);
+            border: 1px solid #1d4ed8;
+        }
+        .timeline-segment.production-night {
+            background: linear-gradient(180deg, #8b5cf6 0%, #7c3aed 100%);
+            border-radius: 4px;
+            z-index: 5;
+            opacity: 0.95;
+            box-shadow: 0 2px 4px rgba(124, 58, 237, 0.3);
+            border: 1px solid #6d28d9;
+        }
+        
+        .timeline-segment.production-day:hover, .timeline-segment.production-night:hover {
+            transform: scaleY(1.15) scaleX(1.005);
+            z-index: 20;
+            opacity: 1;
+            box-shadow: 0 4px 12px rgba(79, 70, 229, 0.4);
+        }
+
+        .timeline-segment.timeline-gap {
+            background-color: #e5e7eb;
+            background-image: repeating-linear-gradient(
+                45deg, transparent, transparent 5px, #d1d5db 5px, #d1d5db 10px
+            );
+            border-radius: 0;
+            z-index: 1;
+            cursor: help;
+            opacity: 0.6;
+        }
+         .timeline-bar-night .timeline-segment.timeline-gap {
+            background-color: #4b5563;
+            background-image: repeating-linear-gradient(
+                45deg, transparent, transparent 5px, #374151 5px, #374151 10px
+            );
+            opacity: 0.5;
+        }
+
+        .time-marker {
+            position: absolute;
+            top: -20px; 
+            width: 2px;
+            height: 60px;
+            background-color: #6366f1; 
+            z-index: 10;
+            opacity: 0.5;
+            pointer-events: none;
+        }
+        .time-marker-label {
+            position: absolute;
+            top: -26px;
+            transform: translateX(-50%);
+            white-space: nowrap;
+            font-size: 0.75rem; 
+            font-weight: 700;
+            color: #3730a3;
+            padding: 2px 8px;
+            background: #e0e7ff;
+            border: 1px solid #6366f1;
+            border-radius: 9999px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        }
+
+        .timeline-segment[data-tooltip]:hover:before {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: 110%; 
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1f2937;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 0.85rem; 
+            white-space: nowrap;
+            z-index: 100;
+            pointer-events: none;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            font-weight: 500;
+            border: 1px solid #374151;
+        }
+        .timeline-segment[data-tooltip]:hover:after {
+            content: '';
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            border-width: 6px;
+            border-style: solid;
+            border-color: #1f2937 transparent transparent transparent;
+            z-index: 100;
+        }
+
+        @keyframes modalFadeIn {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        .modal-content-animate {
+            animation: modalFadeIn 0.2s ease-out forwards;
+        }
+
+        .filter-btn {
+            transition: all 0.2s;
+            border: 1px solid transparent;
+        }
+        .filter-btn.active {
+            background-color: #4f46e5;
+            color: white;
+            border-color: #4338ca;
+            box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.3);
+        }
+        .filter-btn:not(.active):hover {
+            background-color: #eef2ff;
+            color: #4f46e5;
+            border-color: #c7d2fe;
+        }
+        
+        /* 統計卡片樣式 */
+        .stat-card {
+            background-color: white;
+            border-radius: 0.75rem;
+            padding: 1.25rem;
+            border: 1px solid #e5e7eb;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+            transition: all 0.2s;
+        }
+        .stat-card:hover {
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            border-color: #d1d5db;
+        }
+    </style>
+</head>
+<body class="p-2 sm:p-6 min-h-screen flex flex-col items-center">
+
+    <div class="w-full max-w-7xl bg-white rounded-xl shadow-xl overflow-hidden border border-gray-100">
+        
+        <!-- Header -->
+        <div class="bg-gradient-to-r from-indigo-600 to-blue-600 p-6 text-white">
+            <div class="flex items-center space-x-3 mb-2">
+                <svg class="w-8 h-8 opacity-90" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                <h1 class="text-3xl font-bold tracking-tight">工單人員生產時間分析</h1>
+            </div>
+            <div class="flex justify-between items-end">
+                <p class="text-indigo-100 text-base max-w-2xl leading-relaxed">
+                    智慧合併重疊與連續工時區間，並依據實際淨生產時數判斷主要班別。Crafted by 勝全
+                </p>
+            </div>
+        </div>
+
+        <div class="p-4 md:p-6 space-y-6">
+            
+            <!-- 狀態與訊息區 -->
+            <div id="message-box" class="hidden rounded-lg p-4 flex items-start space-x-3 transition-all duration-300 border-l-4" role="alert">
+                <!-- Icon 由 JS 動態決定 -->
+            </div>
+
+            <!-- 檔案上傳區 (單一檔案) -->
+            <div class="grid grid-cols-1 gap-4">
+                <div class="group">
+                    <div class="flex items-center justify-between mb-1">
+                        <label class="text-base font-semibold text-gray-700 flex items-center">
+                            <span class="bg-indigo-100 text-indigo-700 text-xs px-2 py-0.5 rounded mr-2">Step 1</span>
+                            上傳工單人員記錄表
+                        </label>
+                        <span class="text-xs text-red-500 font-medium">*必填</span>
+                    </div>
+                    
+                    <label for="file-start-end" id="label-file-1" class="custom-file-upload w-full h-24 cursor-pointer bg-slate-50 hover:bg-white border-2 border-dashed border-indigo-200 hover:border-indigo-500 rounded-lg flex flex-col justify-center items-center text-center group-hover:text-indigo-600">
+                        <div class="flex items-center space-x-2">
+                            <svg class="w-6 h-6 text-indigo-300 group-hover:text-indigo-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+                            <span class="text-base font-medium text-gray-600 group-hover:text-indigo-600">上傳 Excel/CSV 檔案</span>
+                        </div>
+                    </label>
+                    <input type="file" id="file-start-end" accept=".csv, .xlsx" onchange="handleFileSelect(this, 'file1')">
+                </div>
+            </div>
+
+            <!-- 執行按鈕 -->
+            <div class="pt-2">
+                <button id="analyze-btn" onclick="runAnalysis()" disabled
+                    class="w-full py-3 px-6 text-white text-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed font-bold rounded-lg shadow-md hover:shadow-lg transition-all duration-300 transform active:scale-[0.99] flex justify-center items-center space-x-2">
+                    <span>🚀 執行資料分析與彙總</span>
+                </button>
+            </div>
+
+            <!-- 結果輸出區 -->
+            <div id="results-section" class="mt-6 hidden animate-fade-in-up">
+                
+                <!-- 篩選器工具列 -->
+                <div class="flex flex-col lg:flex-row lg:items-center justify-between mb-6 gap-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
+                    <div class="flex flex-col sm:flex-row gap-4 w-full lg:w-auto">
+                        <!-- 日期篩選 -->
+                        <div class="flex items-center">
+                            <label for="date-select" class="text-sm font-bold text-gray-600 mr-2 whitespace-nowrap">
+                                <svg class="w-4 h-4 inline-block mr-1 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                                篩選日期:
+                            </label>
+                            <select id="date-select" onchange="applyFiltersAndRender()" class="block w-full sm:w-48 pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md shadow-sm border">
+                                <option value="ALL">顯示全部日期</option>
+                                <!-- 日期選項將動態插入 -->
+                            </select>
+                        </div>
+
+                        <!-- 廠區篩選 -->
+                        <div class="flex items-center space-x-2 overflow-x-auto pb-1 sm:pb-0">
+                            <span class="text-sm font-bold text-gray-600 mr-1 whitespace-nowrap">廠區:</span>
+                            <button onclick="setFilter('ALL')" id="filter-all" class="filter-btn active px-3 py-1.5 rounded-md text-sm font-semibold text-gray-600 bg-white border-gray-200 whitespace-nowrap">全部</button>
+                            <button onclick="setFilter('G')" id="filter-g" class="filter-btn px-3 py-1.5 rounded-md text-sm font-semibold text-gray-600 bg-white border-gray-200 whitespace-nowrap">宗瑋 (G)</button>
+                            <button onclick="setFilter('D')" id="filter-d" class="filter-btn px-3 py-1.5 rounded-md text-sm font-semibold text-gray-600 bg-white border-gray-200 whitespace-nowrap">博士 (D)</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 儀表板 (Dashboard) -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <!-- 總人數卡片 -->
+                    <div class="stat-card border-l-4 border-l-blue-500">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <p class="text-sm font-medium text-gray-500 uppercase tracking-wider">上工人員總數</p>
+                                <h3 class="text-3xl font-bold text-gray-800 mt-1" id="stat-total-workers">0</h3>
+                            </div>
+                            <div class="p-2 bg-blue-50 rounded-lg">
+                                <svg class="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+                            </div>
+                        </div>
+                        <p class="text-xs text-gray-400 mt-2">根據當前篩選條件</p>
+                    </div>
+
+                    <!-- 異常工時卡片 -->
+                    <div class="stat-card border-l-4 border-l-red-500">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <p class="text-sm font-medium text-gray-500 uppercase tracking-wider flex items-center">
+                                    異常時數人員
+                                    <span class="ml-1 cursor-help group relative">
+                                        <svg class="w-4 h-4 text-gray-400 hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                        <span class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded hidden group-hover:block whitespace-nowrap z-10">定義：工時 < 10H 或 > 14H (12±2)</span>
+                                    </span>
+                                </p>
+                                <h3 class="text-3xl font-bold text-red-600 mt-1" id="stat-abnormal-workers">0</h3>
+                            </div>
+                            <div class="p-2 bg-red-50 rounded-lg">
+                                <svg class="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            </div>
+                        </div>
+                        <p class="text-xs text-red-400 mt-2 font-medium" id="stat-abnormal-percent">佔比 0%</p>
+                    </div>
+
+                    <!-- 平均工時卡片 -->
+                    <div class="stat-card border-l-4 border-l-green-500">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <p class="text-sm font-medium text-gray-500 uppercase tracking-wider">平均生產工時</p>
+                                <h3 class="text-3xl font-bold text-green-700 mt-1" id="stat-avg-hours">00:00</h3>
+                            </div>
+                            <div class="p-2 bg-green-50 rounded-lg">
+                                <svg class="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                            </div>
+                        </div>
+                        <p class="text-xs text-gray-400 mt-2">有效工時平均值</p>
+                    </div>
+                </div>
+                
+                <h2 class="text-xl font-bold text-gray-800 mb-3 flex items-center">
+                    <span class="mr-2">📋</span> 詳細清單
+                </h2>
+
+                <div class="responsive-table-container shadow-sm">
+                    <table id="results-table" class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-100">
+                            <tr>
+                                <th scope="col" class="px-5 py-3 text-left text-sm font-bold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-200 transition-colors" onclick="sortTable(0, 'string')">
+                                    作業員 ID <span id="sort-icon-0" class="ml-1 text-indigo-500"></span>
+                                </th>
+                                <th scope="col" class="px-5 py-3 text-left text-sm font-bold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-200 transition-colors" onclick="sortTable(1, 'string')">
+                                    員工姓名 <span id="sort-icon-1" class="ml-1 text-indigo-500"></span>
+                                </th>
+                                <th scope="col" class="px-5 py-3 text-left text-sm font-bold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-200 transition-colors" onclick="sortTable(2, 'time')">
+                                    實際總生產時間 <span class="text-xs normal-case text-gray-500">(合併後)</span> <span id="sort-icon-2" class="ml-1 text-indigo-500">▼</span>
+                                </th>
+                                <th scope="col" class="px-5 py-3 text-left text-sm font-bold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-200 transition-colors" onclick="sortTable(3, 'number')">
+                                    總工單數 <span id="sort-icon-3" class="ml-1 text-indigo-500"></span>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody id="results-table-body" class="bg-white divide-y divide-gray-100">
+                            <!-- 結果將會動態插入此處 -->
+                        </tbody>
+                    </table>
+                </div>
+                <div class="mt-3 p-3 bg-indigo-50 rounded-lg border border-indigo-100">
+                    <p id="total-summary" class="text-base text-indigo-900 font-medium text-center"></p>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Detail Modal -->
+    <div id="detail-modal" class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm hidden z-50 overflow-y-auto" onclick="hideDetails()">
+        <div class="flex items-center justify-center min-h-screen p-4">
+            <!-- Modal Content -->
+            <div class="bg-white rounded-xl shadow-2xl w-full max-w-7xl modal-content-animate flex flex-col max-h-[95vh]" onclick="event.stopPropagation()">
+                
+                <!-- Modal Header -->
+                <div class="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 rounded-t-xl">
+                    <div>
+                        <h3 id="modal-title" class="text-2xl font-bold text-gray-800"></h3>
+                        <p id="modal-summary" class="text-base text-gray-500 mt-1"></p>
+                    </div>
+                    <button onclick="hideDetails()" class="p-2 bg-white rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors shadow-sm border border-gray-200">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+
+                <!-- Modal Body (Scrollable) -->
+                <div class="p-5 overflow-y-auto custom-scrollbar">
+                    
+                    <!-- 時程圖區塊 -->
+                    <div class="mb-6">
+                        <div class="flex items-center justify-between mb-2">
+                            <h4 class="text-lg font-bold text-gray-800 flex items-center">
+                                <span class="w-1.5 h-6 bg-indigo-600 rounded-full mr-2"></span>
+                                總生產時程統一可視化
+                            </h4>
+                            <div class="flex items-center space-x-4 text-sm">
+                                <div class="flex items-center"><span class="w-4 h-4 bg-blue-500 rounded-sm mr-1"></span> 生產時間 (日班色彩)</div>
+                                <div class="flex items-center"><span class="w-4 h-4 bg-violet-500 rounded-sm mr-1"></span> 生產時間 (夜班色彩)</div>
+                                <div class="flex items-center"><span class="w-4 h-4 bg-gray-300 rounded-sm mr-1" style="background-image: repeating-linear-gradient(45deg,transparent,transparent 2px,#9ca3af 2px,#9ca3af 4px); opacity:0.5"></span> 非生產時間</div>
+                            </div>
+                        </div>
+                        
+                        <div id="timeline-container" class="space-y-4">
+                            <!-- 時程圖動態插入 -->
+                        </div>
+                    </div>
+
+                    <!-- 原始紀錄表格 -->
+                    <div class="mt-8">
+                        <h4 class="text-lg font-bold text-gray-800 mb-2 flex items-center">
+                            <span class="w-1.5 h-6 bg-gray-400 rounded-full mr-2"></span>
+                            原始打卡記錄明細
+                        </h4>
+                        <div class="responsive-table-container max-h-96 overflow-y-auto border border-gray-200 rounded-lg shadow-inner bg-gray-50">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-100 sticky top-0 z-10 shadow-sm">
+                                    <tr>
+                                        <th class="px-4 py-3 text-left font-semibold text-gray-700 uppercase">製程</th>
+                                        <th class="px-4 py-3 text-left font-semibold text-gray-700 uppercase">工單單號</th>
+                                        <th class="px-4 py-3 text-left font-semibold text-gray-700 uppercase">開始時間</th>
+                                        <th class="px-4 py-3 text-left font-semibold text-gray-700 uppercase">結束時間</th>
+                                        <th class="px-4 py-3 text-left font-semibold text-indigo-600 uppercase">單次工時</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="detail-table-body" class="bg-white divide-y divide-gray-100">
+                                    <!-- Detail rows here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 全域變數
+        let files = {}; 
+        let allRawRecords = []; // 儲存所有未處理的原始 JSON 資料
+        let allRawDataByOperator = {}; // 儲存每個作業員的彙總資料 (供 Modal 使用)
+        let displayedResults = []; // 目前顯示在表格中的資料
+        let uniqueDates = new Set(); // 資料中出現的所有日期
+        
+        // 狀態變數
+        let currentFilterFactory = 'ALL'; // ALL, G, D
+        let currentFilterDate = 'ALL'; // YYYY-MM-DD or ALL
+        let currentSortColumn = 2; // 預設依據實際總生產時間排序
+        let currentSortDirection = 'desc'; 
+        
+        // 欄位名稱設定
+        const COL_OPERATOR_ID = '員工代號';
+        const COL_OPERATOR_NAME = '員工姓名';
+        const COL_START_TIME = '開始生產時間';
+        const COL_END_TIME = '結束生產時間';
+        const COL_PROCESS = '製程';
+        const COL_WORK_ORDER = '工單單號';
+
+        const MSG_BOX = document.getElementById('message-box');
+        const ANALYZE_BTN = document.getElementById('analyze-btn');
+        const RESULTS_SECTION = document.getElementById('results-section');
+        const RESULTS_TABLE_BODY = document.getElementById('results-table-body');
+        const DATE_SELECT = document.getElementById('date-select');
+        
+        // 日夜班時間設定（毫秒為單位）
+        const SHIFT_HOUR = 7; // 7點
+        const SHIFT_MINUTE = 30; // 30分
+        const SHIFT_DURATION_MS = 12 * 3600 * 1000; // 12小時
+
+        // 異常時數定義 (12小時 ± 2小時 => 10 ~ 14 小時)
+        const ABNORMAL_MIN_MS = 10 * 3600 * 1000; // 10 小時
+        const ABNORMAL_MAX_MS = 14 * 3600 * 1000; // 14 小時
+
+
+        function handleFileSelect(input, fileKey) {
+            if (input.files.length > 0) {
+                files[fileKey] = input.files[0];
+                const label = document.getElementById(`label-file-${fileKey.slice(-1)}`);
+                if (fileKey === 'file1') {
+                     label.innerHTML = `
+                        <div class="flex items-center space-x-2">
+                            <svg class="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            <span class="text-base font-medium text-green-600">${input.files[0].name}</span>
+                        </div>
+                    `;
+                }
+            } else {
+                delete files[fileKey];
+                const label = document.getElementById(`label-file-${fileKey.slice(-1)}`);
+                if (fileKey === 'file1') {
+                    label.innerHTML = `
+                        <div class="flex items-center space-x-2">
+                            <svg class="w-6 h-6 text-indigo-300 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+                            <span class="text-base font-medium text-gray-600">上傳 Excel/CSV 檔案</span>
+                        </div>
+                    `;
+                }
+            }
+            
+            ANALYZE_BTN.disabled = !files['file1'];
+            if (files['file1']) {
+                showMessage("檔案已上傳。點擊『執行資料分析與彙總』開始計算。", 'info');
+            } else {
+                showMessage("請上傳工單人員記錄表以啟用分析功能。", 'info');
+            }
+        }
+
+
+        function showMessage(message, type) {
+            MSG_BOX.classList.remove('hidden', 'bg-red-50', 'border-red-500', 'text-red-700', 'bg-green-50', 'border-green-500', 'text-green-700', 'bg-blue-50', 'border-blue-500', 'text-blue-700');
+            
+            let icon = '';
+            if (type === 'success') {
+                MSG_BOX.classList.add('bg-green-50', 'border-green-500', 'text-green-800');
+                icon = '<svg class="w-5 h-5 text-green-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
+            } else if (type === 'error') {
+                MSG_BOX.classList.add('bg-red-50', 'border-red-500', 'text-red-800');
+                icon = '<svg class="w-5 h-5 text-red-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
+            } else {
+                MSG_BOX.classList.add('bg-blue-50', 'border-blue-500', 'text-blue-800');
+                icon = '<svg class="w-5 h-5 text-blue-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
+            }
+
+            MSG_BOX.innerHTML = `
+                <div class="flex-shrink-0">${icon}</div>
+                <div class="text-base font-medium leading-relaxed">${message}</div>
+            `;
+        }
+
+        function formatDuration(ms) {
+            if (ms < 0) return '00:00:00';
+            const totalSeconds = Math.floor(ms / 1000);
+            const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
+            const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
+            const seconds = String(totalSeconds % 60).padStart(2, '0');
+            return `${hours}:${minutes}:${seconds}`;
+        }
+        
+        function formatDateTime(timestampMs) {
+            const date = new Date(timestampMs);
+            const Y = date.getFullYear();
+            const M = String(date.getMonth() + 1).padStart(2, '0');
+            const D = String(date.getDate()).padStart(2, '0');
+            const h = String(date.getHours()).padStart(2, '0');
+            const m = String(date.getMinutes()).padStart(2, '0');
+            const s = String(date.getSeconds()).padStart(2, '0');
+            return `${Y}-${M}-${D} ${h}:${m}:${s}`;
+        }
+
+        // 簡單日期格式化 YYYY-MM-DD
+        function formatDateSimple(timestampMs) {
+            const date = new Date(timestampMs);
+            const Y = date.getFullYear();
+            const M = String(date.getMonth() + 1).padStart(2, '0');
+            const D = String(date.getDate()).padStart(2, '0');
+            return `${Y}-${M}-${D}`;
+        }
+        
+        function getShiftStartTime(timestampMs) {
+            const date = new Date(timestampMs);
+            let day = new Date(date);
+            day.setHours(SHIFT_HOUR, SHIFT_MINUTE, 0, 0); 
+            let night = new Date(date);
+            night.setHours(SHIFT_HOUR + 12, SHIFT_MINUTE, 0, 0); 
+
+            if (timestampMs >= day.getTime() && timestampMs < night.getTime()) {
+                return day.getTime(); 
+            } 
+            
+            if (timestampMs >= night.getTime()) {
+                return night.getTime(); 
+            } else {
+                let previousNight = new Date(date);
+                previousNight.setDate(previousNight.getDate() - 1);
+                previousNight.setHours(SHIFT_HOUR + 12, SHIFT_MINUTE, 0, 0);
+                return previousNight.getTime();
+            }
+        }
+
+        function mergeIntervals(intervals) {
+            if (!intervals || intervals.length === 0) {
+                return { totalDurationMs: 0, mergedIntervals: [] };
+            }
+
+            intervals.sort((a, b) => a[0] - b[0]);
+
+            let merged = [];
+            let totalDurationMs = 0;
+            let currentStart = intervals[0][0];
+            let currentEnd = intervals[0][1];
+
+            for (let i = 1; i < intervals.length; i++) {
+                const nextStart = intervals[i][0];
+                const nextEnd = intervals[i][1];
+                
+                if (nextStart - currentEnd <= 1000) { 
+                    currentEnd = Math.max(currentEnd, nextEnd);
+                } else {
+                    totalDurationMs += (currentEnd - currentStart);
+                    merged.push([currentStart, currentEnd]);
+                    currentStart = nextStart;
+                    currentEnd = nextEnd;
+                }
+            }
+
+            totalDurationMs += (currentEnd - currentStart);
+            merged.push([currentStart, currentEnd]);
+            
+            return { totalDurationMs, mergedIntervals: merged };
+        }
+        
+        function calculateShiftDurations(mergedIntervals) {
+            let totalDayMs = 0;
+            let totalNightMs = 0;
+
+            for (const [startMs, endMs] of mergedIntervals) {
+                let current = startMs;
+                while (current < endMs) {
+                    const shiftStartMs = getShiftStartTime(current);
+                    const shiftEndMs = shiftStartMs + SHIFT_DURATION_MS;
+                    const intervalStart = Math.max(current, shiftStartMs);
+                    const intervalEnd = Math.min(endMs, shiftEndMs);
+                    
+                    if (intervalStart < intervalEnd) {
+                        const duration = intervalEnd - intervalStart;
+                        const shiftStartTimeDate = new Date(shiftStartMs);
+                        const isDayShift = shiftStartTimeDate.getHours() === SHIFT_HOUR && shiftStartTimeDate.getMinutes() === SHIFT_MINUTE; 
+                        
+                        if (isDayShift) {
+                            totalDayMs += duration;
+                        } else {
+                            totalNightMs += duration;
+                        }
+                    }
+                    current = shiftEndMs;
+                }
+            }
+            return { totalDayMs, totalNightMs };
+        }
+
+        /**
+         * 核心計算邏輯
+         * 根據傳入的 Raw Records 進行合併計算
+         */
+        function aggregateProductionTime(records) {
+            const operatorWorkData = {}; 
+            let failedRecords = 0;
+
+            if (!records || records.length === 0) return [];
+
+            records.forEach((record) => {
+                const operatorId = record[COL_OPERATOR_ID];
+                const operatorName = record[COL_OPERATOR_NAME] || 'N/A';
+                const startTimeStr = record[COL_START_TIME];
+                const endTimeStr = record[COL_END_TIME];
+                
+                let startTimeMs, endTimeMs;
+                try {
+                    startTimeMs = new Date(startTimeStr).getTime();
+                    endTimeMs = new Date(endTimeStr).getTime();
+                } catch (e) {
+                    failedRecords++;
+                    return;
+                }
+                
+                if (!operatorId || isNaN(startTimeMs) || isNaN(endTimeMs) || endTimeMs <= startTimeMs) {
+                    failedRecords++;
+                    return;
+                }
+
+                if (!operatorWorkData[operatorId]) {
+                    operatorWorkData[operatorId] = {
+                        allIntervals: [], 
+                        rawRecords: [],
+                        operatorName: operatorName,
+                        minTime: Infinity, 
+                        maxTime: -Infinity  
+                    };
+                }
+
+                operatorWorkData[operatorId].allIntervals.push([startTimeMs, endTimeMs]);
+                operatorWorkData[operatorId].rawRecords.push(record);
+                operatorWorkData[operatorId].minTime = Math.min(operatorWorkData[operatorId].minTime, startTimeMs);
+                operatorWorkData[operatorId].maxTime = Math.max(operatorWorkData[operatorId].maxTime, endTimeMs);
+            });
+
+            const aggregatedResults = [];
+            allRawDataByOperator = {}; // Reset global detail cache
+
+            for (const operatorId in operatorWorkData) {
+                const operatorData = operatorWorkData[operatorId];
+                const { totalDurationMs, mergedIntervals } = mergeIntervals(operatorData.allIntervals);
+                const { totalDayMs, totalNightMs } = calculateShiftDurations(mergedIntervals);
+                const primaryShift = totalNightMs > totalDayMs ? 'Night' : 'Day';
+
+                const result = {
+                    operatorId: operatorId,
+                    operatorName: operatorData.operatorName,
+                    totalDurationMs: totalDurationMs,
+                    eventCount: operatorData.rawRecords.length, 
+                };
+                aggregatedResults.push(result);
+                
+                allRawDataByOperator[operatorId] = {
+                    ...result,
+                    rawRecords: operatorData.rawRecords,
+                    allMergedIntervals: mergedIntervals,
+                    overallMinTime: operatorData.minTime,
+                    overallMaxTime: operatorData.maxTime,
+                    primaryShift: primaryShift,
+                    totalDayMs: totalDayMs,
+                    totalNightMs: totalNightMs
+                };
+            }
+
+            return aggregatedResults;
+        }
+
+        async function runAnalysis() {
+            if (!files['file1']) {
+                showMessage("❌ 請確認檔案已成功上傳。", 'error');
+                return;
+            }
+
+            showMessage("⌛ 正在解析檔案...", 'info');
+            ANALYZE_BTN.disabled = true;
+            ANALYZE_BTN.innerHTML = '<svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> 處理中...';
+
+            try {
+                await new Promise(r => setTimeout(r, 300));
+
+                const jsonData = await readFile(files['file1']); 
+                if (!jsonData || jsonData.length === 0) {
+                    throw new Error("檔案內容為空或無法解析。");
+                }
+                
+                allRawRecords = jsonData;
+
+                // 1. 提取所有唯一日期
+                uniqueDates.clear();
+                allRawRecords.forEach(record => {
+                    if(record[COL_START_TIME]) {
+                        try {
+                            const d = new Date(record[COL_START_TIME]);
+                            if (!isNaN(d.getTime())) {
+                                uniqueDates.add(formatDateSimple(d));
+                            }
+                        } catch(e) {}
+                    }
+                });
+
+                // 2. 填充日期下拉選單
+                const sortedDates = Array.from(uniqueDates).sort().reverse(); // 降序，最新的在前面
+                DATE_SELECT.innerHTML = '<option value="ALL">顯示全部日期</option>';
+                sortedDates.forEach(dateStr => {
+                    const option = document.createElement('option');
+                    option.value = dateStr;
+                    option.textContent = dateStr;
+                    DATE_SELECT.appendChild(option);
+                });
+
+                // 3. 預設選取最新的日期 (如果有)
+                if (sortedDates.length > 0) {
+                    currentFilterDate = sortedDates[0];
+                    DATE_SELECT.value = currentFilterDate;
+                    showMessage(`✅ 分析完成！預設顯示最新日期 ${currentFilterDate} 的數據。`, 'success');
+                } else {
+                    currentFilterDate = 'ALL';
+                    showMessage(`✅ 分析完成！共載入 ${allRawRecords.length} 筆原始數據。`, 'success');
+                }
+
+                // 4. 執行篩選與渲染
+                applyFiltersAndRender();
+
+            } catch (error) {
+                console.error(error);
+                showMessage(`❌ 分析失敗：${error.message}`, 'error');
+            } finally {
+                ANALYZE_BTN.disabled = !files['file1'];
+                ANALYZE_BTN.innerHTML = '<span>🚀 執行資料分析與彙總</span>';
+            }
+        }
+
+        function readFile(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const data = new Uint8Array(e.target.result);
+                        const workbook = XLSX.read(data, { type: 'array', cellDates: false }); 
+                        const firstSheetName = workbook.SheetNames[0];
+                        const worksheet = workbook.Sheets[firstSheetName];
+                        const json = XLSX.utils.sheet_to_json(worksheet, {raw: true}); 
+                        resolve(json);
+                    } catch (err) {
+                        reject(new Error(`檔案 ${file.name} 格式錯誤或損毀。`));
+                    }
+                };
+                reader.onerror = (err) => reject(new Error(`檔案 ${file.name} 讀取失敗。`));
+                reader.readAsArrayBuffer(file);
+            });
+        }
+
+        /**
+         * 應用篩選器並重新渲染
+         * 流程：篩選 Raw Data (日期) -> 重新 Aggregate -> 篩選 Aggregated Data (廠區) -> 計算統計 -> 渲染
+         */
+        function applyFiltersAndRender() {
+            // 1. 取得篩選條件
+            currentFilterDate = DATE_SELECT.value;
+            // currentFilterFactory 已由 setFilter 更新
+
+            // 2. 篩選 Raw Data (日期)
+            let filteredRawRecords = allRawRecords;
+            if (currentFilterDate !== 'ALL') {
+                filteredRawRecords = allRawRecords.filter(record => {
+                    if (!record[COL_START_TIME]) return false;
+                    const d = new Date(record[COL_START_TIME]);
+                    return !isNaN(d.getTime()) && formatDateSimple(d) === currentFilterDate;
+                });
+            }
+
+            // 3. 重新計算 Aggregation
+            const aggregatedResults = aggregateProductionTime(filteredRawRecords);
+
+            // 4. 篩選 Aggregated Data (廠區)
+            displayedResults = aggregatedResults.filter(item => {
+                const id = String(item.operatorId).toUpperCase();
+                if (currentFilterFactory === 'G') return id.startsWith('G');
+                if (currentFilterFactory === 'D') return id.startsWith('D');
+                return true;
+            });
+
+            // 5. 更新統計儀表板
+            updateDashboard(displayedResults);
+
+            // 6. 渲染表格
+            renderResultsTable(displayedResults);
+        }
+
+        function setFilter(type) {
+            currentFilterFactory = type;
+            
+            // Update UI buttons
+            const btns = ['all', 'g', 'd']; 
+            btns.forEach(b => {
+                const btn = document.getElementById(`filter-${b}`);
+                if (btn) btn.classList.remove('active');
+            });
+            const activeBtn = document.getElementById(`filter-${type.toLowerCase()}`);
+            if(activeBtn) activeBtn.classList.add('active');
+
+            applyFiltersAndRender();
+        }
+
+        function updateDashboard(results) {
+            const totalWorkers = results.length;
+            let abnormalWorkers = 0;
+            let totalHoursMs = 0;
+
+            results.forEach(item => {
+                totalHoursMs += item.totalDurationMs;
+                // 異常定義: < 10H 或 > 14H
+                if (item.totalDurationMs < ABNORMAL_MIN_MS || item.totalDurationMs > ABNORMAL_MAX_MS) {
+                    abnormalWorkers++;
+                }
+            });
+
+            const avgHoursMs = totalWorkers > 0 ? (totalHoursMs / totalWorkers) : 0;
+            const abnormalPercent = totalWorkers > 0 ? Math.round((abnormalWorkers / totalWorkers) * 100) : 0;
+            
+            // 動畫數字效果 (簡單版)
+            document.getElementById('stat-total-workers').textContent = totalWorkers;
+            document.getElementById('stat-abnormal-workers').textContent = abnormalWorkers;
+            document.getElementById('stat-abnormal-percent').textContent = `佔比 ${abnormalPercent}%`;
+            document.getElementById('stat-avg-hours').textContent = formatDuration(avgHoursMs).substring(0, 5); // 只顯示 HH:MM
+            
+            // 異常卡片顏色警告
+            const abnormalCardValue = document.getElementById('stat-abnormal-workers');
+            if(abnormalWorkers > 0) {
+                 abnormalCardValue.classList.remove('text-gray-800');
+                 abnormalCardValue.classList.add('text-red-600');
+            } else {
+                 abnormalCardValue.classList.remove('text-red-600');
+                 abnormalCardValue.classList.add('text-gray-800');
+            }
+        }
+
+        function renderResultsTable(results) {
+            RESULTS_TABLE_BODY.innerHTML = '';
+            RESULTS_SECTION.classList.remove('hidden');
+
+            let totalOverallTimeMs = 0;
+            let totalEvents = 0;
+
+            // 確保排序正確
+            sortDataArray(results, currentSortColumn, currentSortDirection);
+
+            results.forEach((item, index) => {
+                const totalDurationFormatted = formatDuration(item.totalDurationMs);
+                totalOverallTimeMs += item.totalDurationMs;
+                totalEvents += item.eventCount;
+                
+                // 判斷是否異常顯示顏色
+                const isAbnormal = item.totalDurationMs < ABNORMAL_MIN_MS || item.totalDurationMs > ABNORMAL_MAX_MS;
+                const durationClass = isAbnormal ? 'text-red-600 bg-red-50 border-red-100' : 'text-indigo-600 bg-indigo-50 border-indigo-100';
+                
+                const isEven = index % 2 === 0;
+                const row = document.createElement('tr');
+                row.className = isEven ? 'bg-white hover:bg-indigo-50/50 transition-colors' : 'bg-slate-50 hover:bg-indigo-50/50 transition-colors';
+                row.innerHTML = `
+                    <td class="px-5 py-3 whitespace-nowrap text-base font-bold text-gray-900 border-l-4 border-transparent hover:border-indigo-400 pl-4 font-mono">${item.operatorId}</td>
+                    <td class="px-5 py-3 whitespace-nowrap text-base font-medium text-gray-700">${item.operatorName}</td>
+                    <td onclick="showDetails('${item.operatorId}')" class="px-5 py-3 whitespace-nowrap cursor-pointer group" data-ms="${item.totalDurationMs}">
+                        <div class="flex items-center">
+                            <span class="text-base font-bold ${durationClass} group-hover:brightness-95 transition-all px-3 py-1 rounded-md border">
+                                ${totalDurationFormatted}
+                                ${isAbnormal ? '<span class="ml-1 text-xs">⚠️</span>' : ''}
+                            </span>
+                        </div>
+                    </td>
+                    <td class="px-5 py-3 whitespace-nowrap text-base text-gray-700 font-mono pl-8">${item.eventCount}</td>
+                `;
+                RESULTS_TABLE_BODY.appendChild(row);
+            });
+
+            // 更新底部摘要
+            let filterText = currentFilterFactory === 'G' ? '宗瑋廠 (G)' : (currentFilterFactory === 'D' ? '博士廠 (D)' : '全體');
+            let dateText = currentFilterDate === 'ALL' ? '全部日期' : currentFilterDate;
+
+            document.getElementById('total-summary').innerHTML = `
+                <div class="flex flex-col sm:flex-row justify-center items-center gap-2 sm:gap-6">
+                    <span class="font-bold text-gray-700">【${filterText} / ${dateText}】統計：</span>
+                    <span>人員: <b class="text-black">${results.length}</b> 人</span>
+                    <span>總淨工時: <b class="text-indigo-600 text-xl">${formatDuration(totalOverallTimeMs)}</b></span>
+                </div>
+            `;
+        }
+
+        function createUnifiedTimelineHTML(operatorData) {
+            const overallMinMs = operatorData.overallMinTime;
+            const overallMaxMs = operatorData.overallMaxTime;
+            const mergedIntervals = operatorData.allMergedIntervals;
+            const primaryShift = operatorData.primaryShift; 
+
+            if (overallMinMs === Infinity || overallMaxMs === -Infinity || overallMinMs >= overallMaxMs) {
+                return '<div class="p-6 text-center text-gray-400 bg-gray-50 rounded-lg border border-dashed">無可顯示的時程數據</div>';
+            }
+
+            const totalDurationMs = overallMaxMs - overallMinMs; 
+            const isDayShift = primaryShift === 'Day';
+            const barClass = isDayShift ? 'timeline-bar-day' : 'timeline-bar-night';
+            
+            let timelineItemsHTML = '';
+            let totalProductionMs = 0;
+
+            mergedIntervals.forEach(([segmentStartMs, segmentEndMs]) => {
+                const segmentDuration = segmentEndMs - segmentStartMs;
+                totalProductionMs += segmentDuration;
+                
+                const segmentStartOffsetMs = segmentStartMs - overallMinMs;
+                const leftPercentage = (segmentStartOffsetMs / totalDurationMs) * 100;
+                const widthPercentage = (segmentDuration / totalDurationMs) * 100;
+                const segmentTitle = `生產時間: ${formatDuration(segmentDuration)} (${formatDateTime(segmentStartMs)} ~ ${formatDateTime(segmentEndMs)})`;
+                
+                const {totalDayMs: segDay, totalNightMs: segNight} = calculateShiftDurations([[segmentStartMs, segmentEndMs]]);
+                const segmentColorClass = segNight > segDay ? 'production-night' : 'production-day';
+                
+                timelineItemsHTML += `
+                    <div class="timeline-segment ${segmentColorClass}" 
+                         style="left: ${leftPercentage}%; width: ${widthPercentage}%;" 
+                         data-tooltip="${segmentTitle}">
+                    </div>
+                `;
+            });
+
+            mergedIntervals.sort((a, b) => a[0] - b[0]);
+            let currentPositionMs = overallMinMs;
+            
+            mergedIntervals.forEach(([segmentStartMs, segmentEndMs]) => {
+                const gapDurationMs = segmentStartMs - currentPositionMs;
+                if (gapDurationMs > 0) {
+                    const gapStartOffsetMs = currentPositionMs - overallMinMs;
+                    const leftPercentage = (gapStartOffsetMs / totalDurationMs) * 100;
+                    const widthPercentage = (gapDurationMs / totalDurationMs) * 100;
+                    const gapDurationFormatted = formatDuration(gapDurationMs);
+                    const gapTitle = `非生產時間: ${gapDurationFormatted}`; 
+                    
+                    timelineItemsHTML += `
+                        <div class="timeline-segment timeline-gap" 
+                            style="left: ${leftPercentage}%; width: ${widthPercentage}%;" 
+                            data-tooltip="${gapTitle}">
+                        </div>
+                    `;
+                }
+                currentPositionMs = segmentEndMs;
+            });
+
+            const trailingGapMs = overallMaxMs - currentPositionMs;
+            if (trailingGapMs > 0) {
+                 const gapStartOffsetMs = currentPositionMs - overallMinMs;
+                 const leftPercentage = (gapStartOffsetMs / totalDurationMs) * 100;
+                 const widthPercentage = (trailingGapMs / totalDurationMs) * 100;
+                 const gapDurationFormatted = formatDuration(trailingGapMs);
+                 const gapTitle = `非生產時間: ${gapDurationFormatted}`;
+
+                 timelineItemsHTML += `
+                    <div class="timeline-segment timeline-gap" 
+                        style="left: ${leftPercentage}%; width: ${widthPercentage}%;" 
+                        data-tooltip="${gapTitle}">
+                    </div>
+                 `;
+            }
+            
+            const startMarkerHtml = `
+                <div class="time-marker" style="left: 0%;">
+                    <div class="time-marker-label text-xs">${formatDateTime(overallMinMs)} (起始打卡)</div>
+                </div>
+            `;
+            const endMarkerHtml = `
+                <div class="time-marker" style="left: 100%;">
+                    <div class="time-marker-label text-xs" style="transform: translateX(-100%); right: 0; left: unset;">
+                        ${formatDateTime(overallMaxMs)} (結束打卡)
+                    </div>
+                </div>
+            `;
+
+            return `
+                <div class="border border-gray-200 rounded-xl p-5 mb-4 shadow-md bg-white">
+                    <div class="flex justify-between items-center pb-2 border-b border-gray-100 mb-4">
+                        <h5 class="text-xl font-semibold text-gray-800">
+                            實際生產時程
+                        </h5>
+                        <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4 text-sm font-medium">
+                            <span>實際總工時: <b class="text-indigo-600 text-xl">${formatDuration(totalProductionMs)}</b></span>
+                        </div>
+                    </div>
+                    <div class="${barClass} w-full relative">
+                        ${timelineItemsHTML}
+                        ${startMarkerHtml}
+                        ${endMarkerHtml}
+                    </div>
+                </div>
+            `;
+        }
+
+        function showDetails(operatorId) {
+            const operatorData = allRawDataByOperator[operatorId];
+            const modal = document.getElementById('detail-modal');
+            const title = document.getElementById('modal-title');
+            const summary = document.getElementById('modal-summary');
+            const tableBody = document.getElementById('detail-table-body');
+            const timelineContainer = document.getElementById('timeline-container');
+            
+            if (!operatorData) return;
+
+            const operatorName = operatorData.operatorName || '未知姓名';
+            title.innerHTML = `<span class="bg-indigo-600 text-white text-base px-3 py-1 rounded mr-2 align-middle font-mono">${operatorId}</span> ${operatorName}`;
+            
+            summary.innerHTML = `
+                <span class="inline-flex items-center mr-6 text-base">
+                    <svg class="w-5 h-5 text-gray-400 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    總淨工時: <span class="font-bold text-gray-800 ml-1">${formatDuration(operatorData.totalDurationMs)}</span>
+                </span>
+                <span class="inline-flex items-center text-base">
+                    <svg class="w-5 h-5 text-gray-400 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
+                    總工單數: <span class="font-bold text-gray-800 ml-1">${operatorData.eventCount}</span>
+                </span>
+            `;
+            
+            tableBody.innerHTML = '';
+            timelineContainer.innerHTML = '';
+
+            const fullTimelineHTML = createUnifiedTimelineHTML(operatorData); 
+            timelineContainer.innerHTML = fullTimelineHTML;
+
+            const sortedRecords = operatorData.rawRecords.sort((a, b) => new Date(a[COL_START_TIME]).getTime() - new Date(b[COL_START_TIME]).getTime());
+
+            sortedRecords.forEach((record, index) => {
+                const startTimeMs = new Date(record[COL_START_TIME]).getTime();
+                const endTimeMs = new Date(record[COL_END_TIME]).getTime();
+                const duration = endTimeMs > startTimeMs ? (endTimeMs - startTimeMs) : 0;
+                
+                const row = document.createElement('tr');
+                row.className = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+                row.innerHTML = `
+                    <td class="px-4 py-3 text-base text-gray-800 font-medium">${record[COL_PROCESS] || '-'}</td>
+                    <td class="px-4 py-3 text-base text-gray-600 font-mono">${record[COL_WORK_ORDER] || '-'}</td>
+                    <td class="px-4 py-3 text-base text-gray-600 whitespace-nowrap">${record[COL_START_TIME] || '-'}</td>
+                    <td class="px-4 py-3 text-base text-gray-600 whitespace-nowrap">${record[COL_END_TIME] || '-'}</td>
+                    <td class="px-4 py-3 text-base text-indigo-600 font-bold font-mono">${formatDuration(duration)}</td>
+                `;
+                tableBody.appendChild(row);
+            });
+
+            modal.classList.remove('hidden');
+            document.body.style.overflow = 'hidden'; 
+        }
+
+        function hideDetails() {
+            document.getElementById('detail-modal').classList.add('hidden');
+            document.body.style.overflow = '';
+        }
+        
+        function sortDataArray(data, columnIndex, direction) {
+            data.sort((a, b) => {
+                let aValue, bValue;
+                if (columnIndex === 0) { 
+                    aValue = a.operatorId;
+                    bValue = b.operatorId;
+                } else if (columnIndex === 1) { 
+                    aValue = a.operatorName;
+                    bValue = b.operatorName;
+                } else if (columnIndex === 2) { 
+                    aValue = a.totalDurationMs;
+                    bValue = b.totalDurationMs;
+                } else if (columnIndex === 3) { 
+                    aValue = a.eventCount;
+                    bValue = b.eventCount;
+                }
+
+                if (aValue > bValue) return direction === 'asc' ? 1 : -1;
+                if (aValue < bValue) return direction === 'asc' ? -1 : 1;
+                return 0;
+            });
+        }
+        
+        function sortTable(columnIndex, type) {
+            if (currentSortColumn === columnIndex) {
+                currentSortDirection = currentSortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSortColumn = columnIndex;
+                currentSortDirection = (type === 'time' || type === 'number') ? 'desc' : 'asc'; 
+            }
+
+            const headers = document.querySelectorAll('#results-table thead th');
+            headers.forEach((header, index) => {
+                const iconSpan = document.getElementById(`sort-icon-${index}`);
+                if (iconSpan) {
+                    iconSpan.textContent = '';
+                    if (index === currentSortColumn) {
+                        iconSpan.textContent = currentSortDirection === 'asc' ? '▲' : '▼';
+                    }
+                }
+            });
+
+            renderResultsTable(displayedResults); 
+        }
+
+        window.onload = () => {
+             showMessage("請上傳工單人員記錄表以啟用分析功能。", 'info');
+             document.getElementById(`sort-icon-2`).textContent = '▼';
+        };
+
+    </script>
+</body>
+</html>
