@@ -110,64 +110,90 @@
             margin-right: 6px;
         }
         
-        #legend-factory .legend-text {
-            font-size: 0.875rem; 
-            font-weight: 700;
-            color: #334155;
-            white-space: nowrap;
-        }
-        #legend-factory .percent-text {
-            font-size: 1.05rem; 
-            font-weight: 800;
-        }
+        .legend-text { font-size: 0.875rem; font-weight: 700; color: #334155; }
+        .percent-text { font-size: 1.05rem; font-weight: 800; }
 
-        .legend-text { font-size: 0.95rem; font-weight: 700; color: #334155; }
-        .percent-text { font-size: 1.15rem; font-weight: 900; color: #0f172a; }
-
-        /* 生產時序能量圖樣式 */
-        .timeline-container {
-            height: 100px;
-            border-radius: 20px;
+        /* --- 方案一：分日橫向捲軸圖樣式 --- */
+        .day-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+        .day-label {
+            width: 100px;
+            flex-shrink: 0;
+            font-weight: 900;
+            color: #475569;
+            font-size: 14px;
+        }
+        .timeline-track {
+            flex-grow: 1;
+            height: 40px;
+            background: #f1f5f9;
+            border-radius: 10px;
             position: relative;
             overflow: visible;
             border: 1px solid #e2e8f0;
-            margin-bottom: 45px;
         }
 
-        .bg-day-shift { background-color: #fffbeb; } 
-        .bg-night-shift { background-color: #0f172a; } 
+        /* 標示日班區間的陰影 (07:30 - 19:30) */
+        .shift-zone {
+            position: absolute;
+            top: 0; bottom: 0;
+            background: rgba(255, 251, 235, 0.8);
+            border-left: 1px dashed #fcd34d;
+            border-right: 1px dashed #fcd34d;
+            z-index: 0;
+        }
 
-        .timeline-grid {
+        .timeline-grid-v2 {
             position: absolute;
             top: 0; bottom: 0;
             width: 1px;
-            background-color: rgba(100, 116, 139, 0.15);
+            background-color: rgba(100, 116, 139, 0.1);
+            z-index: 1;
         }
-        .timeline-label {
+        .hour-mark {
             position: absolute;
-            bottom: -30px;
+            top: -18px;
             transform: translateX(-50%);
-            font-size: 11px;
+            font-size: 10px;
             color: #94a3b8;
-            white-space: nowrap;
+            font-weight: 700;
         }
 
-        .timeline-block {
+        .block-v2 {
             position: absolute;
-            top: 20px;
-            height: 60px;
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0 8px;
-            font-size: 10px;
-            color: white;
-            font-weight: 900;
-            min-width: 2px;
+            top: 6px;
+            height: 28px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: transform 0.1s;
+            z-index: 10;
         }
-        .bg-normal { background: linear-gradient(to bottom, #6366f1, #4f46e5); border: 1px solid #4338ca; }
-        .bg-overlap { background: linear-gradient(to bottom, #f43f5e, #e11d48); border: 1px solid #be123c; box-shadow: 0 0 15px rgba(225, 29, 72, 0.3); }
+        .block-v2:hover {
+            transform: scaleY(1.15);
+            z-index: 50;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        .bg-normal-v2 { background: #6366f1; border: 1px solid #4338ca; }
+        .bg-overlap-v2 { background: #f43f5e; border: 1px solid #be123c; z-index: 20; }
+
+        /* Tooltip 樣式 */
+        #custom-tooltip {
+            position: fixed;
+            background: rgba(15, 23, 42, 0.95);
+            color: white;
+            padding: 12px 16px;
+            border-radius: 12px;
+            font-size: 13px;
+            pointer-events: none;
+            z-index: 9999;
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3);
+            display: none;
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
 
         .btn-primary {
             background: var(--primary);
@@ -195,6 +221,8 @@
 </head>
 <body class="min-h-screen">
 
+    <div id="custom-tooltip"></div>
+
     <header class="glass-header text-white py-6 px-8 shadow-2xl sticky top-0 z-40">
         <div class="max-w-[1600px] mx-auto flex flex-col md:flex-row justify-between items-center">
             <div class="flex items-center space-x-5">
@@ -215,6 +243,7 @@
 
     <main class="max-w-[1600px] mx-auto px-6 py-8">
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            <!-- 左側控制欄 -->
             <aside class="lg:col-span-3 space-y-8">
                 <section class="bento-card p-6">
                     <h2 class="text-lg font-black text-slate-800 mb-6 flex items-center">
@@ -241,7 +270,7 @@
                     </h2>
                     <div class="space-y-6">
                         <div>
-                            <label class="stat-label block mb-3">分析日期</label>
+                            <label class="stat-label block mb-3">分析日期區間</label>
                             <select id="date-picker" onchange="refreshView()" class="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-4 text-xl font-black text-slate-700 focus:border-indigo-500 outline-none">
                                 <option value="ALL">全部紀錄</option>
                             </select>
@@ -258,27 +287,30 @@
                 </section>
             </aside>
 
+            <!-- 右側內容區 -->
             <div class="lg:col-span-9 space-y-8">
+                <!-- 數據卡片區 -->
                 <div id="stats-dashboard" class="grid grid-cols-1 gap-8 hidden">
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <div class="bento-card p-8 bg-indigo-50 border-indigo-100 flex flex-col justify-center">
-                            <p class="stat-label mb-3">上工總人數</p>
+                            <p class="stat-label mb-3 text-indigo-600">上工總人數</p>
                             <div class="flex items-end"><span id="stat-workers" class="stat-number text-indigo-700">0</span><span class="text-xl font-black text-indigo-400 ml-2">人</span></div>
                         </div>
                         <div class="bento-card p-8 bg-rose-50 border-rose-100 flex flex-col justify-center">
                             <p class="stat-label text-rose-600 mb-3">工時異常人數</p>
                             <div class="flex items-end"><span id="stat-abnormal" class="stat-number text-rose-700">0</span><span id="stat-ab-perc" class="text-xl font-black text-rose-400 ml-2">0%</span></div>
-                            <p class="text-xs text-rose-400 font-bold mt-2">*依實際上班天數加權計算</p>
+                            <p class="text-[10px] text-rose-400 font-bold mt-2 uppercase tracking-tighter">Based on actual working days</p>
                         </div>
-                        <div class="bento-card p-8 bg-emerald-50 border-emerald-100 flex flex-col justify-center">
-                            <p class="stat-label text-emerald-600 mb-3">人均生產工時</p>
-                            <div class="flex items-end"><span id="stat-avg" class="stat-number text-emerald-700">00:00:00</span><span class="text-xl font-black text-emerald-400 ml-2">H/人</span></div>
+                        <div id="card-avg" class="bento-card p-8 bg-emerald-50 border-emerald-100 flex flex-col justify-center transition-colors duration-300">
+                            <p id="label-avg" class="stat-label text-emerald-600 mb-3">人均生產工時</p>
+                            <div class="flex items-end"><span id="stat-avg" class="stat-number text-emerald-700">00:00:00</span><span id="unit-avg" class="text-xl font-black text-emerald-400 ml-2">H/人</span></div>
+                            <p id="note-avg" class="text-[10px] font-black mt-2 opacity-80 text-emerald-500 uppercase tracking-tighter">*Dynamic Benchmarking enabled</p>
                         </div>
                     </div>
 
                     <div class="grid grid-cols-1 xl:grid-cols-12 gap-8">
                         <div class="bento-card p-6 xl:col-span-5">
-                            <h3 class="text-lg font-black text-slate-800 mb-4 border-l-6 border-indigo-500 pl-4">廠區人數佔比 (%)</h3>
+                            <h3 class="text-lg font-black text-slate-800 mb-4 border-l-6 border-indigo-500 pl-4">廠區人數分佈</h3>
                             <div class="chart-wrapper">
                                 <div class="chart-canvas-container-narrow shrink-0">
                                     <canvas id="chart-factory"></canvas>
@@ -287,7 +319,7 @@
                             </div>
                         </div>
                         <div class="bento-card p-6 xl:col-span-7">
-                            <h3 class="text-lg font-black text-slate-800 mb-4 border-l-6 border-emerald-500 pl-4">製程人數配置 (Top 10)</h3>
+                            <h3 class="text-lg font-black text-slate-800 mb-4 border-l-6 border-emerald-500 pl-4">製程人力分配 (Top 10)</h3>
                             <div class="chart-wrapper">
                                 <div class="chart-canvas-container-wide shrink-0">
                                     <canvas id="chart-process"></canvas>
@@ -298,9 +330,10 @@
                     </div>
                 </div>
 
+                <!-- 列表顯示區 -->
                 <section id="table-container" class="bento-card hidden overflow-hidden">
                     <div class="px-8 py-8 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
-                        <h2 class="text-2xl font-black text-slate-800 flex items-center">人員效率明細</h2>
+                        <h2 class="text-2xl font-black text-slate-800 flex items-center">人員效率分析明細</h2>
                         <span id="row-count" class="text-md font-black bg-indigo-600 text-white px-5 py-2 rounded-xl"></span>
                     </div>
                     <div class="overflow-x-auto">
@@ -309,10 +342,10 @@
                                 <tr>
                                     <th class="text-left cursor-pointer" onclick="handleSort(0)">員工代號 <span id="s-0"></span></th>
                                     <th class="text-left">姓名</th>
-                                    <th class="text-center">班別</th>
-                                    <th class="text-left cursor-pointer" onclick="handleSort(2)">淨生產工時 <span id="s-2">▼</span></th>
+                                    <th class="text-center">模式</th>
+                                    <th class="text-left cursor-pointer" onclick="handleSort(2)">總淨生產工時 <span id="s-2">▼</span></th>
                                     <th id="th-avg-daily" class="text-left">平均每日工時</th>
-                                    <th class="text-center">工單筆數</th>
+                                    <th class="text-center">累計單數</th>
                                 </tr>
                             </thead>
                             <tbody id="main-table-body" class="bg-white"></tbody>
@@ -323,39 +356,57 @@
         </div>
     </main>
 
+    <!-- 人員詳情 Modal -->
     <div id="modal-backdrop" class="fixed inset-0 bg-slate-900/90 backdrop-blur-xl hidden z-50 flex items-center justify-center p-6" onclick="closeModal()">
-        <div class="bg-white rounded-[2rem] shadow-2xl w-full max-w-6xl max-h-[92vh] flex flex-col overflow-hidden" onclick="event.stopPropagation()">
-            <div class="p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+        <div class="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-7xl max-h-[94vh] flex flex-col overflow-hidden" onclick="event.stopPropagation()">
+            <!-- Modal Header -->
+            <div class="p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                 <div class="flex items-center space-x-6">
-                    <div class="w-20 h-20 bg-indigo-600 rounded-3xl flex items-center justify-center text-white text-3xl font-black shadow-lg" id="modal-avatar">?</div>
+                    <div class="w-20 h-20 bg-indigo-600 rounded-[1.5rem] flex items-center justify-center text-white text-3xl font-black shadow-lg" id="modal-avatar">?</div>
                     <div>
                         <div class="flex items-center">
-                            <h3 id="m-name" class="text-3xl font-black text-slate-900">載入中...</h3>
-                            <span id="m-shift-tag" class="ml-4 px-4 py-1.5 rounded-xl text-sm font-black uppercase shadow-sm"></span>
+                            <h3 id="m-name" class="text-3xl font-black text-slate-900 tracking-tight">載入中...</h3>
+                            <span id="m-shift-tag" class="ml-4 px-4 py-1.5 rounded-xl text-xs font-black uppercase shadow-sm"></span>
                         </div>
                         <p id="m-meta" class="text-slate-500 font-bold mt-2 text-lg"></p>
                     </div>
                 </div>
-                <button onclick="closeModal()" class="p-4 bg-slate-200 hover:bg-rose-100 hover:text-rose-600 rounded-full transition-all duration-300"><svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12"/></svg></button>
+                <button onclick="closeModal()" class="p-4 bg-slate-100 hover:bg-rose-100 hover:text-rose-600 rounded-full transition-all duration-300">
+                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
             </div>
+
+            <!-- Modal Body -->
             <div class="p-10 overflow-y-auto space-y-12">
+                <!-- 時序圖區塊 (方案一：分日顯示) -->
                 <div>
-                    <h4 class="text-xl font-black text-slate-800 mb-10 flex items-center">📊 生產時序能量圖 <span class="ml-3 text-sm font-bold text-slate-400">(自動偵測班別背景)</span></h4>
-                    <div id="modal-timeline"></div>
+                    <h4 class="text-xl font-black text-slate-800 mb-8 flex items-center">
+                        <span class="w-2 h-2 bg-indigo-600 rounded-full mr-3"></span>
+                        生產時序分布 (分日視覺化)
+                        <span class="ml-4 text-xs font-bold text-slate-400 bg-slate-100 px-3 py-1 rounded-full">滑鼠懸停區塊可查看細節</span>
+                    </h4>
+                    <div id="modal-timeline-v2" class="space-y-2 pt-6">
+                        <!-- 由 JS 生成分日橫條 -->
+                    </div>
                 </div>
+
+                <!-- 數據表格 -->
                 <div class="space-y-6">
-                    <h4 class="text-xl font-black text-slate-800 uppercase tracking-tight">工單詳細內容</h4>
-                    <div class="rounded-3xl border-2 border-slate-100 overflow-hidden shadow-sm">
+                    <h4 class="text-xl font-black text-slate-800 flex items-center">
+                        <span class="w-2 h-2 bg-emerald-500 rounded-full mr-3"></span>
+                        工單明細紀錄
+                    </h4>
+                    <div class="rounded-3xl border border-slate-100 overflow-hidden">
                         <table class="w-full">
                             <thead class="bg-slate-50">
-                                <tr class="text-sm font-black text-slate-500 uppercase tracking-widest">
-                                    <th class="px-8 py-5 text-left">製程</th>
+                                <tr class="text-[11px] font-black text-slate-500 uppercase tracking-widest">
+                                    <th class="px-8 py-5 text-left">製程階段</th>
                                     <th class="px-8 py-5 text-left">工單單號</th>
-                                    <th class="px-8 py-5 text-left">作業區間</th>
+                                    <th class="px-8 py-5 text-left">生產時間區間</th>
                                     <th class="px-8 py-5 text-right">作業工時</th>
                                 </tr>
                             </thead>
-                            <tbody id="m-table-body" class="divide-y divide-slate-100 text-slate-700 font-bold"></tbody>
+                            <tbody id="m-table-body" class="divide-y divide-slate-50 text-slate-700 font-bold text-sm"></tbody>
                         </table>
                     </div>
                 </div>
@@ -375,6 +426,19 @@
         const ERR_MIN = 8 * 3600 * 1000;
         const ERR_MAX = 14 * 3600 * 1000;
 
+        // Tooltip 控制邏輯
+        const tooltip = document.getElementById('custom-tooltip');
+        function showTooltip(e, content) {
+            tooltip.innerHTML = content;
+            tooltip.style.display = 'block';
+            updateTooltipPos(e);
+        }
+        function updateTooltipPos(e) {
+            tooltip.style.left = (e.clientX + 15) + 'px';
+            tooltip.style.top = (e.clientY + 15) + 'px';
+        }
+        function hideTooltip() { tooltip.style.display = 'none'; }
+
         window.onload = function() {
             if (typeof Chart !== 'undefined' && typeof ChartDataLabels !== 'undefined') {
                 Chart.register(ChartDataLabels);
@@ -382,7 +446,7 @@
         };
 
         function fmtHms(ms) {
-            if (isNaN(ms)) return "00:00:00";
+            if (isNaN(ms) || ms < 0) return "00:00:00";
             let s = Math.floor(ms / 1000);
             return `${String(Math.floor(s/3600)).padStart(2,'0')}:${String(Math.floor((s%3600)/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
         }
@@ -408,7 +472,6 @@
                 instruction.classList.add('hidden');
                 dropZone.classList.add('has-file');
                 document.getElementById('analyze-btn').disabled = false;
-                setStatus(`已選取: ${fileName}`);
             } else {
                 nameDisplay.classList.add('hidden');
                 instruction.classList.remove('hidden');
@@ -424,9 +487,11 @@
             reader.onload = async (e) => {
                 const wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
                 rawRecords = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+                
+                // 處理日期選單
                 const dates = [...new Set(rawRecords.map(r => r[KEYS.START] ? fmtDay(new Date(r[KEYS.START])) : null).filter(Boolean))].sort().reverse();
                 const dp = document.getElementById('date-picker');
-                dp.innerHTML = '<option value="ALL">全部紀錄</option>';
+                dp.innerHTML = '<option value="ALL">全部紀錄 (累計)</option>';
                 dates.forEach(d => dp.innerHTML += `<option value="${d}">${d}</option>`);
                 if(dates.length) dp.value = dates[0];
 
@@ -434,42 +499,26 @@
                 document.getElementById('stats-dashboard').classList.remove('hidden');
                 document.getElementById('table-container').classList.remove('hidden');
                 refreshView();
-                setStatus("分析報告已產出");
+                setStatus("分析報告已更新");
             };
             reader.readAsArrayBuffer(file);
         }
 
-        function getDayTimeInRange(start, end) {
-            let totalDayMs = 0;
-            let current = new Date(start);
+        // 計算日班區間內的工時 (07:30 - 19:30) 用於判斷班別
+        function getDayShiftMs(start, end) {
+            let total = 0;
+            let cur = new Date(start);
             const targetEnd = new Date(end);
-
-            while (current < targetEnd) {
-                let dayStart = new Date(current);
-                dayStart.setHours(7, 30, 0, 0);
-                
-                let dayEnd = new Date(current);
-                dayEnd.setHours(19, 30, 0, 0);
-
-                if (current >= dayEnd) {
-                    current.setDate(current.getDate() + 1);
-                    current.setHours(0, 0, 0, 0);
-                    continue;
-                }
-
-                let overlapStart = Math.max(current.getTime(), dayStart.getTime());
-                let overlapEnd = Math.min(targetEnd.getTime(), dayEnd.getTime());
-
-                if (overlapEnd > overlapStart) {
-                    totalDayMs += (overlapEnd - overlapStart);
-                }
-
-                let nextStep = new Date(current);
-                nextStep.setDate(nextStep.getDate() + 1);
-                nextStep.setHours(0, 0, 0, 0);
-                current = nextStep < targetEnd ? nextStep : targetEnd;
+            while (cur < targetEnd) {
+                let dStart = new Date(cur); dStart.setHours(7, 30, 0, 0);
+                let dEnd = new Date(cur); dEnd.setHours(19, 30, 0, 0);
+                let oS = Math.max(cur.getTime(), dStart.getTime());
+                let oE = Math.min(targetEnd.getTime(), dEnd.getTime());
+                if (oE > oS) total += (oE - oS);
+                let next = new Date(cur); next.setDate(next.getDate() + 1); next.setHours(0, 0, 0, 0);
+                cur = next < targetEnd ? next : targetEnd;
             }
-            return totalDayMs;
+            return total;
         }
 
         function refreshView() {
@@ -484,7 +533,6 @@
                 const id = r[KEYS.ID], start = new Date(r[KEYS.START]).getTime(), end = new Date(r[KEYS.END]).getTime(), proc = r[KEYS.PROC] || '未分類';
                 if (!id || isNaN(start) || isNaN(end) || end <= start) return;
                 
-                // 新增 dates 集合來追蹤實際上班天數
                 if (!opMap[id]) opMap[id] = { name: r[KEYS.NAME]||'?', intervals: [], raw: [], min: Infinity, max: -Infinity, dates: new Set() };
                 opMap[id].intervals.push({start, end, proc, order: r[KEYS.ORDER]});
                 opMap[id].raw.push(r);
@@ -504,39 +552,49 @@
                 let totalDayMs = 0;
                 let totalWorkMs = 0;
                 data.intervals.forEach(i => {
-                    const dur = i.end - i.start;
-                    totalWorkMs += dur;
-                    totalDayMs += getDayTimeInRange(i.start, i.end);
+                    totalWorkMs += (i.end - i.start);
+                    totalDayMs += getDayShiftMs(i.start, i.end);
                 });
 
-                const shift = (totalDayMs >= (totalWorkMs / 2)) ? 'DAY' : 'NIGHT';
+                const shift = (totalDayMs >= (totalWorkMs * 0.5)) ? 'DAY' : 'NIGHT';
 
+                // 計算重疊塊
                 let overlapCheck = [], sortedPoints = [];
-                data.intervals.forEach(i => { sortedPoints.push({time: i.start, type: 1}); sortedPoints.push({time: i.end, type: -1}); });
+                data.intervals.forEach(i => { 
+                    sortedPoints.push({time: i.start, type: 1, info: i}); 
+                    sortedPoints.push({time: i.end, type: -1, info: i}); 
+                });
                 sortedPoints.sort((a,b) => a.time - b.time || a.type);
+                
                 let active = 0, currentStart = null;
+                let activeIntervals = new Set();
                 for(let p of sortedPoints) {
                     if(active > 0 && currentStart !== null && p.time > currentStart) {
-                        overlapCheck.push({start: currentStart, end: p.time, count: active});
+                        overlapCheck.push({
+                            start: currentStart, 
+                            end: p.time, 
+                            count: active,
+                            details: Array.from(activeIntervals)
+                        });
                     }
-                    active += p.type;
+                    if (p.type === 1) { active++; activeIntervals.add(p.info); }
+                    else { active--; activeIntervals.delete(p.info); }
                     currentStart = p.time;
                 }
 
-                let total = 0;
+                // 計算淨生產工時 (扣除重疊後的連續段)
+                let netTotal = 0;
                 if(data.intervals.length) {
                     let s = data.intervals[0].start, e = data.intervals[0].end;
                     for(let i=1; i<data.intervals.length; i++) {
-                        if(data.intervals[i].start <= e + 1000) e = Math.max(e, data.intervals[i].end);
-                        else { total += (e-s); s = data.intervals[i].start; e = data.intervals[i].end; }
+                        if(data.intervals[i].start <= e) e = Math.max(e, data.intervals[i].end);
+                        else { netTotal += (e-s); s = data.intervals[i].start; e = data.intervals[i].end; }
                     }
-                    total += (e-s);
+                    netTotal += (e-s);
                 }
                 
-                // 計算實際上工天數
                 const dayCount = data.dates.size || 1; 
-
-                const obj = { id, name: data.name, totalMs: total, count: data.raw.length, shift, dayCount };
+                const obj = { id, name: data.name, totalMs: netTotal, count: data.raw.length, shift, dayCount };
                 tableData.push(obj);
                 processedData[id] = { ...obj, raw: data.raw, min: data.min, max: data.max, overlapBlocks: overlapCheck };
             }
@@ -552,73 +610,51 @@
                 return true;
             });
 
-            let ab = 0, sum = 0, gCount = 0, dCount = 0;
+            let ab = 0, sum = 0, gCount = 0, dCount = 0, totalDaysAccumulated = 0;
             filtered.forEach(d => {
                 sum += d.totalMs;
-                // 修正：異常判斷邏輯，依照該員實際上班天數進行動態加權
-                // 1天: 8~14, 2天: 16~28, 依此類推
-                const dynamicMin = ERR_MIN * d.dayCount;
-                const dynamicMax = ERR_MAX * d.dayCount;
-                
-                if (d.totalMs < dynamicMin || d.totalMs > dynamicMax) ab++;
-                
-                if (String(d.id).startsWith('G')) gCount++;
-                else if (String(d.id).startsWith('D')) dCount++;
+                totalDaysAccumulated += d.dayCount;
+                if (d.totalMs < (ERR_MIN * d.dayCount) || d.totalMs > (ERR_MAX * d.dayCount)) ab++;
+                if (String(d.id).startsWith('G')) gCount++; else if (String(d.id).startsWith('D')) dCount++;
             });
 
             document.getElementById('stat-workers').innerText = filtered.length;
             document.getElementById('stat-abnormal').innerText = ab;
             document.getElementById('stat-ab-perc').innerText = filtered.length ? Math.round(ab/filtered.length*100) + '%' : '0%';
-            document.getElementById('stat-avg').innerText = filtered.length ? fmtHms(sum/filtered.length) : '00:00:00';
+            
+            const avgMs = filtered.length ? sum/filtered.length : 0;
+            document.getElementById('stat-avg').innerText = fmtHms(avgMs);
+            const avgDays = filtered.length ? totalDaysAccumulated / filtered.length : 1;
+
+            // 調整卡片顏色
+            const card = document.getElementById('card-avg');
+            if (avgMs < ERR_MIN * avgDays) {
+                card.className = 'bento-card p-8 bg-amber-50 border-amber-100 flex flex-col justify-center transition-all';
+            } else if (avgMs > ERR_MAX * avgDays) {
+                card.className = 'bento-card p-8 bg-rose-50 border-rose-100 flex flex-col justify-center transition-all';
+            } else {
+                card.className = 'bento-card p-8 bg-emerald-50 border-emerald-100 flex flex-col justify-center transition-all';
+            }
             
             updateChartWithLegend('chart-factory', 'legend-factory', ['宗瑋 (G)', '博士 (D)'], [gCount, dCount], ['#6366f1', '#f43f5e']);
 
             const sortedProc = Object.entries(processUsers).map(([k,v]) => [k, v.size]).sort((a,b) => b[1]-a[1]);
             const topProc = sortedProc.slice(0, 10);
-            const othersCount = sortedProc.slice(10).reduce((acc, cur) => acc + cur[1], 0);
-            const procLabels = topProc.map(p => p[0]);
-            const procValues = topProc.map(p => p[1]);
-            if(othersCount > 0) { procLabels.push('其他'); procValues.push(othersCount); }
-
-            updateChartWithLegend('chart-process', 'legend-process', procLabels, procValues, ['#10b981', '#6366f1', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4', '#f97316', '#84cc16', '#a855f7', '#94a3b8']);
+            updateChartWithLegend('chart-process', 'legend-process', topProc.map(p=>p[0]), topProc.map(p=>p[1]), ['#10b981', '#6366f1', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4', '#f97316', '#84cc16', '#a855f7', '#94a3b8']);
         }
 
         function updateChartWithLegend(canvasId, legendId, labels, data, colors) {
             if (charts[canvasId]) charts[canvasId].destroy();
             const total = data.reduce((a, b) => a + b, 0);
             const ctx = document.getElementById(canvasId).getContext('2d');
-            
             charts[canvasId] = new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels: labels,
-                    datasets: [{ data: data, backgroundColor: colors, borderWidth: 2, borderColor: '#fff' }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { 
-                        legend: { display: false },
-                        datalabels: { display: false }
-                    },
-                    cutout: '75%'
-                }
+                type: 'doughnut', data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 2, borderColor: '#fff' }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, datalabels: { display: false } }, cutout: '75%' }
             });
-
-            const legendContainer = document.getElementById(legendId);
-            legendContainer.innerHTML = '';
+            const legendContainer = document.getElementById(legendId); legendContainer.innerHTML = '';
             labels.forEach((label, i) => {
                 const percent = total > 0 ? ((data[i]/total)*100).toFixed(1) : 0;
-                const item = document.createElement('div');
-                item.className = "legend-item";
-                item.innerHTML = `
-                    <div class="flex items-center overflow-hidden">
-                        <div class="legend-color shrink-0" style="background:${colors[i]}"></div>
-                        <span class="legend-text truncate">${label} <span class="text-[10px] opacity-50 ml-1 font-bold">${data[i]}人</span></span>
-                    </div>
-                    <span class="percent-text">${percent}%</span>
-                `;
-                legendContainer.appendChild(item);
+                legendContainer.innerHTML += `<div class="legend-item"><div class="flex items-center"><div class="legend-color" style="background:${colors[i]}"></div><span class="legend-text">${label}</span></div><span class="percent-text">${percent}%</span></div>`;
             });
         }
 
@@ -634,58 +670,43 @@
                 return currentSort.dir === 'asc' ? (v1 > v2 ? 1 : -1) : (v1 < v2 ? 1 : -1);
             });
 
-            // --- 新增：動態判斷欄位顯示邏輯 ---
             const filterDate = document.getElementById('date-picker').value;
-            const showAvgDaily = filterDate === 'ALL';
-            
-            // 控制表頭顯示
-            const thAvgDaily = document.getElementById('th-avg-daily');
-            if(thAvgDaily) {
-                if (showAvgDaily) thAvgDaily.classList.remove('hidden');
-                else thAvgDaily.classList.add('hidden');
-            }
-            // --------------------------------
+            const isAll = filterDate === 'ALL';
+            document.getElementById('th-avg-daily').style.display = isAll ? 'table-cell' : 'none';
 
             const tbody = document.getElementById('main-table-body');
             tbody.innerHTML = '';
             filtered.forEach(d => {
-                const dynamicMin = ERR_MIN * d.dayCount;
-                const dynamicMax = ERR_MAX * d.dayCount;
-                
                 let badgeClass = "bg-emerald-100 text-emerald-700";
-                if (d.totalMs < dynamicMin) badgeClass = "bg-amber-100 text-amber-700";
-                else if (d.totalMs > dynamicMax) badgeClass = "bg-rose-100 text-rose-700";
+                if (d.totalMs < ERR_MIN * d.dayCount) badgeClass = "bg-amber-100 text-amber-700";
+                else if (d.totalMs > ERR_MAX * d.dayCount) badgeClass = "bg-rose-100 text-rose-700";
 
                 const tr = document.createElement('tr');
                 tr.className = "hover:bg-indigo-50/70 cursor-pointer group transition-colors border-b border-slate-50";
                 tr.onclick = () => openDetails(d.id);
-                const avgDailyMs = d.totalMs / d.dayCount;
-
                 tr.innerHTML = `
-                    <td class="font-black text-slate-900 py-5">${d.id}</td>
+                    <td class="font-black text-slate-900 py-5 pl-8">${d.id}</td>
                     <td class="font-bold text-slate-500">${d.name}</td>
-                    <td class="text-center"><span class="text-xs font-black px-3 py-1.5 rounded-xl ${d.shift==='DAY'?'bg-amber-100 text-amber-700':'bg-slate-800 text-white'}">${d.shift==='DAY'?'日班':'夜班'}</span></td>
+                    <td class="text-center"><span class="text-[10px] font-black px-3 py-1 rounded-lg ${d.shift==='DAY'?'bg-amber-100 text-amber-700':'bg-slate-800 text-white'}">${d.shift==='DAY'?'日班':'夜班'}</span></td>
                     <td><span class="px-5 py-2 rounded-xl font-black ${badgeClass}">${fmtHms(d.totalMs)}</span></td>
-                    ${showAvgDaily ? `<td class="font-bold text-slate-600">${fmtHms(avgDailyMs)}</td>` : ''}
-                    <td class="text-center font-black text-slate-400 text-lg">${d.count}</td>
+                    <td style="display:${isAll?'table-cell':'none'}" class="font-bold text-slate-400">${fmtHms(d.totalMs/d.dayCount)}</td>
+                    <td class="text-center font-black text-slate-300 text-lg">${d.count}</td>
                 `;
                 tbody.appendChild(tr);
             });
-            document.getElementById('row-count').innerText = `目前顯示: ${filtered.length} 人`;
+            document.getElementById('row-count').innerText = `已顯示 ${filtered.length} 人`;
         }
 
         function handleSort(col) {
             if(currentSort.col === col) currentSort.dir = currentSort.dir === 'asc' ? 'desc' : 'asc';
             else { currentSort.col = col; currentSort.dir = 'desc'; }
-            [0,2].forEach(i => { if(document.getElementById(`s-${i}`)) document.getElementById(`s-${i}`).innerText = (i === currentSort.col) ? (currentSort.dir === 'asc' ? '▲' : '▼') : ''; });
             renderView();
         }
 
         function setFactoryFilter(f) {
             currentFactory = f;
             ['ALL','G','D'].forEach(t => {
-                const btn = document.getElementById(`factory-${t.toLowerCase()}`);
-                btn.className = (t === f) ? "px-4 py-4 rounded-xl border-2 border-indigo-600 bg-indigo-600 text-white font-black text-lg" : "px-4 py-4 rounded-xl border-2 border-slate-200 text-slate-600 font-black text-lg";
+                document.getElementById(`factory-${t.toLowerCase()}`).className = (t === f) ? "px-4 py-4 rounded-xl border-2 border-indigo-600 bg-indigo-600 text-white font-black text-lg" : "px-4 py-4 rounded-xl border-2 border-slate-200 text-slate-600 font-black text-lg";
             });
             refreshView(); 
         }
@@ -695,63 +716,115 @@
             document.getElementById('modal-avatar').innerText = data.name.charAt(0);
             document.getElementById('m-name').innerText = `${data.id} ${data.name}`;
             const shiftTag = document.getElementById('m-shift-tag');
-            shiftTag.innerText = data.shift === 'DAY' ? '☀️ 日班生產模式' : '🌙 夜班生產模式';
-            shiftTag.className = data.shift === 'DAY' ? 'ml-4 px-4 py-1.5 rounded-xl text-sm font-black bg-amber-100 text-amber-700' : 'ml-4 px-4 py-1.5 rounded-xl text-sm font-black bg-slate-900 text-white';
-            document.getElementById('m-meta').innerText = `淨生產時間：${fmtHms(data.totalMs)} | 工單總量：${data.count} 筆`;
+            shiftTag.innerText = data.shift === 'DAY' ? 'Day Shift Mode' : 'Night Shift Mode';
+            shiftTag.className = data.shift === 'DAY' ? 'ml-4 px-3 py-1 rounded-lg text-xs font-black bg-amber-100 text-amber-600' : 'ml-4 px-3 py-1 rounded-lg text-xs font-black bg-slate-900 text-white';
+            document.getElementById('m-meta').innerText = `總淨工時：${fmtHms(data.totalMs)} | 出勤天數：${data.dayCount} 天 | 總工單量：${data.count} 筆`;
             
-            const tl = document.getElementById('modal-timeline');
-            tl.innerHTML = '';
-            const range = data.max - data.min;
-            if(range > 0) {
-                const wrap = document.createElement('div');
-                wrap.className = `timeline-container shadow-inner ${data.shift === 'DAY' ? 'bg-day-shift' : 'bg-night-shift'}`;
+            // --- 方案一：分日橫向時序圖 ---
+            const container = document.getElementById('modal-timeline-v2');
+            container.innerHTML = '';
+
+            // 按日期分組 blocks
+            const blocksByDate = {};
+            data.overlapBlocks.forEach(b => {
+                const day = fmtDay(new Date(b.start));
+                if (!blocksByDate[day]) blocksByDate[day] = [];
+                blocksByDate[day].push(b);
+            });
+
+            // 排序日期 (由新到舊)
+            const sortedDays = Object.keys(blocksByDate).sort().reverse();
+            const msPerDay = 24 * 3600 * 1000;
+
+            sortedDays.forEach(dayStr => {
+                const dayRow = document.createElement('div');
+                dayRow.className = "day-row";
                 
-                const startHour = new Date(data.min).getHours();
-                const endHour = (data.max - data.min > 86400000) ? startHour + 24 : new Date(data.max).getHours() + 1;
+                const label = document.createElement('div');
+                label.className = "day-label";
+                label.innerText = dayStr.split('-').slice(1).join('/'); // 顯示 01/19 格式
                 
-                for(let h = startHour; h <= endHour; h++) {
-                    const hTime = new Date(data.min); hTime.setHours(h, 0, 0, 0);
-                    const pos = (hTime.getTime() - data.min) / range * 100;
-                    if(pos >= 0 && pos <= 100) {
-                        const grid = document.createElement('div');
-                        grid.className = "timeline-grid";
-                        grid.style.left = pos + '%';
-                        const label = document.createElement('div');
-                        label.className = "timeline-label font-black";
-                        label.innerText = (h % 24) + ':00';
-                        grid.appendChild(label);
-                        wrap.appendChild(grid);
+                const track = document.createElement('div');
+                track.className = "timeline-track";
+
+                // 背景：日班標示 (07:30 - 19:30)
+                const shiftZone = document.createElement('div');
+                shiftZone.className = "shift-zone";
+                shiftZone.style.left = (7.5 / 24 * 100) + '%';
+                shiftZone.style.width = (12 / 24 * 100) + '%';
+                track.appendChild(shiftZone);
+
+                // 時間刻度 (每 4 小時一格)
+                for(let h=0; h<=24; h+=4) {
+                    const grid = document.createElement('div');
+                    grid.className = "timeline-grid-v2";
+                    grid.style.left = (h / 24 * 100) + '%';
+                    if (h < 24) {
+                        const mark = document.createElement('div');
+                        mark.className = "hour-mark";
+                        mark.innerText = h + ':00';
+                        grid.appendChild(mark);
                     }
+                    track.appendChild(grid);
                 }
 
-                data.overlapBlocks.forEach(m => {
+                // 渲染當日區塊
+                const dayStartTs = new Date(dayStr + "T00:00:00").getTime();
+                blocksByDate[dayStr].forEach(b => {
                     const block = document.createElement('div');
-                    block.className = `timeline-block shadow-md ${m.count > 1 ? 'bg-overlap' : 'bg-normal'}`;
-                    block.style.left = ((m.start - data.min) / range * 100) + '%';
-                    block.style.width = Math.max(((m.end - m.start) / range * 100), 0.3) + '%';
-                    if (((m.end - m.start) / range * 100) > 8) {
-                        block.innerHTML = `<span>${fmtHTime(m.start)}</span><span>${fmtHTime(m.end)}</span>`;
-                    }
-                    wrap.appendChild(block);
-                });
-                tl.appendChild(wrap);
-            }
+                    const isOverlap = b.count > 1;
+                    block.className = `block-v2 ${isOverlap ? 'bg-overlap-v2' : 'bg-normal-v2'}`;
+                    
+                    // 計算相對當天 0 點的百分比
+                    const startOffset = Math.max(0, b.start - dayStartTs);
+                    const duration = b.end - b.start;
+                    
+                    block.style.left = (startOffset / msPerDay * 100) + '%';
+                    block.style.width = Math.max(0.4, (duration / msPerDay * 100)) + '%';
+                    
+                    // Tooltip 內容預處理
+                    const detailHtml = b.details.map(d => `
+                        <div class="border-b border-white/10 pb-2 mb-2 last:border-0 last:mb-0">
+                            <div class="text-indigo-400 font-black">${d.order}</div>
+                            <div class="text-[11px] opacity-70">${d.proc}</div>
+                            <div class="text-[10px] mt-1 text-slate-300">${fmtHTime(d.start)} - ${fmtHTime(d.end)}</div>
+                        </div>
+                    `).join('');
 
+                    block.onmouseenter = (e) => showTooltip(e, `
+                        <div class="font-black text-rose-400 mb-2">${isOverlap ? '⚠️ 工時重疊 (同時執行多單)' : '✓ 正常生產'}</div>
+                        ${detailHtml}
+                    `);
+                    block.onmousemove = (e) => updateTooltipPos(e);
+                    block.onmouseleave = hideTooltip;
+
+                    track.appendChild(block);
+                });
+
+                dayRow.appendChild(label);
+                dayRow.appendChild(track);
+                container.appendChild(dayRow);
+            });
+
+            // 明細表格
             const mtbody = document.getElementById('m-table-body');
             mtbody.innerHTML = '';
             data.raw.sort((a,b) => new Date(a[KEYS.START]) - new Date(b[KEYS.START])).forEach(r => {
                 const s = new Date(r[KEYS.START]), e = new Date(r[KEYS.END]);
                 mtbody.innerHTML += `<tr class="hover:bg-slate-50 transition-colors">
-                    <td class="px-8 py-5 text-slate-800">${r[KEYS.PROC]}</td>
-                    <td class="px-8 py-5 text-indigo-700 font-black">${r[KEYS.ORDER]}</td>
-                    <td class="px-8 py-5 text-slate-400 text-sm font-bold">${fmtDt(s)} - ${fmtDt(e)}</td>
-                    <td class="px-8 py-5 text-right font-black text-slate-900">${fmtHms(e-s)}</td>
+                    <td class="px-8 py-4 text-slate-800">${r[KEYS.PROC]}</td>
+                    <td class="px-8 py-4 text-indigo-700 font-black">${r[KEYS.ORDER]}</td>
+                    <td class="px-8 py-4 text-slate-400 text-xs font-bold">${fmtDt(s)} - ${fmtDt(e)}</td>
+                    <td class="px-8 py-4 text-right font-black text-slate-900">${fmtHms(e-s)}</td>
                 </tr>`;
             });
             document.getElementById('modal-backdrop').classList.remove('hidden');
         }
 
-        function closeModal() { document.getElementById('modal-backdrop').classList.add('hidden'); }
+        function closeModal() { 
+            document.getElementById('modal-backdrop').classList.add('hidden'); 
+            hideTooltip();
+        }
     </script>
 </body>
 </html>
