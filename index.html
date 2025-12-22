@@ -268,6 +268,7 @@
                         <div class="bento-card p-8 bg-rose-50 border-rose-100 flex flex-col justify-center">
                             <p class="stat-label text-rose-600 mb-3">工時異常人數</p>
                             <div class="flex items-end"><span id="stat-abnormal" class="stat-number text-rose-700">0</span><span id="stat-ab-perc" class="text-xl font-black text-rose-400 ml-2">0%</span></div>
+                            <p class="text-xs text-rose-400 font-bold mt-2">*依實際上班天數加權計算</p>
                         </div>
                         <div class="bento-card p-8 bg-emerald-50 border-emerald-100 flex flex-col justify-center">
                             <p class="stat-label text-emerald-600 mb-3">人均生產工時</p>
@@ -310,6 +311,7 @@
                                     <th class="text-left">姓名</th>
                                     <th class="text-center">班別</th>
                                     <th class="text-left cursor-pointer" onclick="handleSort(2)">淨生產工時 <span id="s-2">▼</span></th>
+                                    <th id="th-avg-daily" class="text-left">平均每日工時</th>
                                     <th class="text-center">工單筆數</th>
                                 </tr>
                             </thead>
@@ -380,6 +382,7 @@
         };
 
         function fmtHms(ms) {
+            if (isNaN(ms)) return "00:00:00";
             let s = Math.floor(ms / 1000);
             return `${String(Math.floor(s/3600)).padStart(2,'0')}:${String(Math.floor((s%3600)/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
         }
@@ -436,10 +439,6 @@
             reader.readAsArrayBuffer(file);
         }
 
-        /**
-         * 修正版班別判斷核心：計算一個區間內屬於日班範圍的時長
-         * 日班定義：07:30 - 19:30
-         */
         function getDayTimeInRange(start, end) {
             let totalDayMs = 0;
             let current = new Date(start);
@@ -452,14 +451,12 @@
                 let dayEnd = new Date(current);
                 dayEnd.setHours(19, 30, 0, 0);
 
-                // 如果當前時間點已經過了今天的日班結束點，跳到明天
                 if (current >= dayEnd) {
                     current.setDate(current.getDate() + 1);
                     current.setHours(0, 0, 0, 0);
                     continue;
                 }
 
-                // 計算當前這天內重疊的區間
                 let overlapStart = Math.max(current.getTime(), dayStart.getTime());
                 let overlapEnd = Math.min(targetEnd.getTime(), dayEnd.getTime());
 
@@ -467,7 +464,6 @@
                     totalDayMs += (overlapEnd - overlapStart);
                 }
 
-                // 往前推到今天結束或目標結束
                 let nextStep = new Date(current);
                 nextStep.setDate(nextStep.getDate() + 1);
                 nextStep.setHours(0, 0, 0, 0);
@@ -488,11 +484,13 @@
                 const id = r[KEYS.ID], start = new Date(r[KEYS.START]).getTime(), end = new Date(r[KEYS.END]).getTime(), proc = r[KEYS.PROC] || '未分類';
                 if (!id || isNaN(start) || isNaN(end) || end <= start) return;
                 
-                if (!opMap[id]) opMap[id] = { name: r[KEYS.NAME]||'?', intervals: [], raw: [], min: Infinity, max: -Infinity };
+                // 新增 dates 集合來追蹤實際上班天數
+                if (!opMap[id]) opMap[id] = { name: r[KEYS.NAME]||'?', intervals: [], raw: [], min: Infinity, max: -Infinity, dates: new Set() };
                 opMap[id].intervals.push({start, end, proc, order: r[KEYS.ORDER]});
                 opMap[id].raw.push(r);
                 opMap[id].min = Math.min(opMap[id].min, start);
                 opMap[id].max = Math.max(opMap[id].max, end);
+                opMap[id].dates.add(fmtDay(new Date(r[KEYS.START])));
 
                 if(!processUsers[proc]) processUsers[proc] = new Set();
                 processUsers[proc].add(id);
@@ -511,7 +509,6 @@
                     totalDayMs += getDayTimeInRange(i.start, i.end);
                 });
 
-                // 修正：日班工時佔比過半則為日班，否則為夜班
                 const shift = (totalDayMs >= (totalWorkMs / 2)) ? 'DAY' : 'NIGHT';
 
                 let overlapCheck = [], sortedPoints = [];
@@ -535,7 +532,11 @@
                     }
                     total += (e-s);
                 }
-                const obj = { id, name: data.name, totalMs: total, count: data.raw.length, shift };
+                
+                // 計算實際上工天數
+                const dayCount = data.dates.size || 1; 
+
+                const obj = { id, name: data.name, totalMs: total, count: data.raw.length, shift, dayCount };
                 tableData.push(obj);
                 processedData[id] = { ...obj, raw: data.raw, min: data.min, max: data.max, overlapBlocks: overlapCheck };
             }
@@ -554,7 +555,13 @@
             let ab = 0, sum = 0, gCount = 0, dCount = 0;
             filtered.forEach(d => {
                 sum += d.totalMs;
-                if (d.totalMs < ERR_MIN || d.totalMs > ERR_MAX) ab++;
+                // 修正：異常判斷邏輯，依照該員實際上班天數進行動態加權
+                // 1天: 8~14, 2天: 16~28, 依此類推
+                const dynamicMin = ERR_MIN * d.dayCount;
+                const dynamicMax = ERR_MAX * d.dayCount;
+                
+                if (d.totalMs < dynamicMin || d.totalMs > dynamicMax) ab++;
+                
                 if (String(d.id).startsWith('G')) gCount++;
                 else if (String(d.id).startsWith('D')) dCount++;
             });
@@ -626,21 +633,40 @@
                 if(currentSort.col === 0) { v1 = String(a.id); v2 = String(b.id); }
                 return currentSort.dir === 'asc' ? (v1 > v2 ? 1 : -1) : (v1 < v2 ? 1 : -1);
             });
+
+            // --- 新增：動態判斷欄位顯示邏輯 ---
+            const filterDate = document.getElementById('date-picker').value;
+            const showAvgDaily = filterDate === 'ALL';
+            
+            // 控制表頭顯示
+            const thAvgDaily = document.getElementById('th-avg-daily');
+            if(thAvgDaily) {
+                if (showAvgDaily) thAvgDaily.classList.remove('hidden');
+                else thAvgDaily.classList.add('hidden');
+            }
+            // --------------------------------
+
             const tbody = document.getElementById('main-table-body');
             tbody.innerHTML = '';
             filtered.forEach(d => {
+                const dynamicMin = ERR_MIN * d.dayCount;
+                const dynamicMax = ERR_MAX * d.dayCount;
+                
                 let badgeClass = "bg-emerald-100 text-emerald-700";
-                if (d.totalMs < ERR_MIN) badgeClass = "bg-amber-100 text-amber-700";
-                else if (d.totalMs > ERR_MAX) badgeClass = "bg-rose-100 text-rose-700";
+                if (d.totalMs < dynamicMin) badgeClass = "bg-amber-100 text-amber-700";
+                else if (d.totalMs > dynamicMax) badgeClass = "bg-rose-100 text-rose-700";
 
                 const tr = document.createElement('tr');
                 tr.className = "hover:bg-indigo-50/70 cursor-pointer group transition-colors border-b border-slate-50";
                 tr.onclick = () => openDetails(d.id);
+                const avgDailyMs = d.totalMs / d.dayCount;
+
                 tr.innerHTML = `
                     <td class="font-black text-slate-900 py-5">${d.id}</td>
                     <td class="font-bold text-slate-500">${d.name}</td>
                     <td class="text-center"><span class="text-xs font-black px-3 py-1.5 rounded-xl ${d.shift==='DAY'?'bg-amber-100 text-amber-700':'bg-slate-800 text-white'}">${d.shift==='DAY'?'日班':'夜班'}</span></td>
                     <td><span class="px-5 py-2 rounded-xl font-black ${badgeClass}">${fmtHms(d.totalMs)}</span></td>
+                    ${showAvgDaily ? `<td class="font-bold text-slate-600">${fmtHms(avgDailyMs)}</td>` : ''}
                     <td class="text-center font-black text-slate-400 text-lg">${d.count}</td>
                 `;
                 tbody.appendChild(tr);
