@@ -3,827 +3,537 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>作業員總生產時間分析 - </title>
+    <title>Production Anomaly Auditor | Crafted by 勝全</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
-
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
-        :root {
-            --primary: #4f46e5;
-            --primary-dark: #3730a3;
-            --bg-main: #f1f5f9;
-        }
-
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700;800&family=Noto+Sans+TC:wght@400;500;700;900&display=swap');
+        
         body { 
-            font-family: 'Inter', 'Noto Sans TC', sans-serif; 
-            background-color: var(--bg-main);
+            font-family: 'Noto Sans TC', sans-serif; 
+            background-color: #f1f5f9;
             color: #0f172a;
-            -webkit-font-smoothing: antialiased;
         }
 
-        .glass-header {
-            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-            border-bottom: 1px solid rgba(255,255,255,0.1);
-        }
+        .metric-font { font-family: 'JetBrains Mono', monospace; }
 
-        .bento-card {
-            background: white;
-            border-radius: 1.5rem;
-            border: 1px solid rgba(226, 232, 240, 0.8);
+        .card-main {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 1.25rem;
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.04);
         }
 
-        .stat-label {
-            font-size: 0.875rem;
-            font-weight: 800;
-            color: #64748b;
-            letter-spacing: 0.05em;
-            text-transform: uppercase;
-        }
-
-        .stat-number {
-            font-size: 2.5rem;
-            font-weight: 900;
-            line-height: 1;
-            color: #1e293b;
-        }
-
-        .upload-area {
-            border: 3px dashed #cbd5e1;
-            background: #f8fafc;
+        .upload-zone {
+            position: relative;
+            transition: all 0.2s ease;
             cursor: pointer;
+            border: 2px dashed #cbd5e1;
+        }
+        .upload-zone:hover { border-color: #3b82f6; background-color: #f8fafc; }
+        .upload-zone.success { border-style: solid; border-color: #10b981; background-color: #f0fdf4; }
+        .upload-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; z-index: 20; }
+
+        .ranking-item {
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            border-left: 8px solid transparent;
+        }
+        .ranking-item:hover { background-color: #f8fafc; transform: scale(1.01); }
+        .ranking-item.active { background-color: #f0f7ff; border-left-color: #2563eb; box-shadow: inset 0 0 0 1px #dbeafe; }
+        .ranking-item.is-anomaly { border-left-color: #dc2626; background-color: #fff1f2; }
+
+        .scroll-style::-webkit-scrollbar { width: 8px; }
+        .scroll-style::-webkit-scrollbar-track { background: #f1f5f9; }
+        .scroll-style::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+
+        .time-match-highlight { background-color: #fefce8 !important; border-left: 4px solid #eab308; }
+        .text-huge { font-size: 3rem; line-height: 1; }
+        
+        .btn-analyze {
             transition: all 0.3s ease;
+            background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
         }
-        .upload-area.has-file {
-            border-color: var(--primary);
-            background: #eef2ff;
-        }
+        .btn-analyze:disabled { background: #94a3b8; transform: none; cursor: not-allowed; }
 
-        /* 圓環圖包裝器 */
-        .chart-wrapper {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            height: 300px;
-            padding: 5px;
+        .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #cbd5e1; transition: .4s; border-radius: 24px;
         }
-        .chart-canvas-container-narrow {
-            width: 150px; 
-            height: 150px;
-            position: relative;
+        .slider:before {
+            position: absolute; content: ""; height: 18px; width: 18px;
+            left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%;
         }
-        .chart-canvas-container-wide {
-            width: 180px; 
-            height: 180px;
-            position: relative;
-        }
-        
-        .chart-legend-container {
-            flex: 1;
-            margin-left: 10px;
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 6px;
-            max-height: 280px;
-            overflow-y: auto;
-        }
+        input:checked + .slider { background-color: #2563eb; }
+        input:checked + .slider:before { transform: translateX(20px); }
 
-        .legend-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 6px 10px;
-            background: #f8fafc;
-            border-radius: 8px;
-            border: 1px solid #f1f5f9;
-        }
-        
-        .legend-color {
-            width: 10px;
-            height: 10px;
-            border-radius: 2px;
-            margin-right: 6px;
-        }
-        
-        .legend-text { font-size: 0.875rem; font-weight: 700; color: #334155; }
-        .percent-text { font-size: 1.05rem; font-weight: 800; }
-
-        /* --- 方案一：分日橫向捲軸圖樣式 --- */
-        .day-row {
-            display: flex;
-            align-items: center;
-            margin-bottom: 24px;
-        }
-        .day-label {
-            width: 100px;
-            flex-shrink: 0;
-            font-weight: 900;
-            color: #475569;
-            font-size: 14px;
-        }
-        .timeline-track {
-            flex-grow: 1;
-            height: 40px;
-            background: #f1f5f9;
-            border-radius: 10px;
-            position: relative;
-            overflow: visible;
-            border: 1px solid #e2e8f0;
-        }
-
-        /* 標示日班區間的陰影 (07:30 - 19:30) */
-        .shift-zone {
-            position: absolute;
-            top: 0; bottom: 0;
-            background: rgba(255, 251, 235, 0.8);
-            border-left: 1px dashed #fcd34d;
-            border-right: 1px dashed #fcd34d;
-            z-index: 0;
-        }
-
-        .timeline-grid-v2 {
-            position: absolute;
-            top: 0; bottom: 0;
-            width: 1px;
-            background-color: rgba(100, 116, 139, 0.1);
-            z-index: 1;
-        }
-        .hour-mark {
-            position: absolute;
-            top: -18px;
-            transform: translateX(-50%);
-            font-size: 10px;
-            color: #94a3b8;
+        .filter-chip {
+            padding: 4px 12px;
+            border-radius: 99px;
+            font-size: 11px;
             font-weight: 700;
-        }
-
-        .block-v2 {
-            position: absolute;
-            top: 6px;
-            height: 28px;
-            border-radius: 6px;
             cursor: pointer;
-            transition: transform 0.1s;
-            z-index: 10;
-        }
-        .block-v2:hover {
-            transform: scaleY(1.15);
-            z-index: 50;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-        }
-        .bg-normal-v2 { background: #6366f1; border: 1px solid #4338ca; }
-        .bg-overlap-v2 { background: #f43f5e; border: 1px solid #be123c; z-index: 20; }
-
-        /* Tooltip 樣式 */
-        #custom-tooltip {
-            position: fixed;
-            background: rgba(15, 23, 42, 0.95);
-            color: white;
-            padding: 12px 16px;
-            border-radius: 12px;
-            font-size: 13px;
-            pointer-events: none;
-            z-index: 9999;
-            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3);
-            display: none;
-            backdrop-filter: blur(4px);
-            border: 1px solid rgba(255,255,255,0.1);
-        }
-
-        .btn-primary {
-            background: var(--primary);
-            color: white;
-            padding: 1.1rem;
-            border-radius: 1rem;
-            font-weight: 800;
-            font-size: 1.1rem;
-            box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.4);
             transition: all 0.2s;
-        }
-        .btn-primary:active { transform: scale(0.98); }
-
-        .data-table th {
-            padding: 1.25rem 1.5rem;
-            background: #f8fafc;
-            border-bottom: 2px solid #e2e8f0;
-            font-size: 0.85rem;
-            font-weight: 900;
+            border: 1px solid #e2e8f0;
+            background: white;
             color: #64748b;
-            text-transform: uppercase;
-            letter-spacing: 0.1em;
+            white-space: nowrap;
+        }
+        .filter-chip.active {
+            background: #2563eb;
+            color: white;
+            border-color: #2563eb;
+        }
+
+        /* 搜尋高亮 */
+        .highlight-text {
+            background-color: #fde047; /* 黃色高亮 */
+            color: #000;
+            padding: 0 2px;
+            border-radius: 2px;
         }
     </style>
 </head>
-<body class="min-h-screen">
-
-    <div id="custom-tooltip"></div>
-
-    <header class="glass-header text-white py-6 px-8 shadow-2xl sticky top-0 z-40">
-        <div class="max-w-[1600px] mx-auto flex flex-col md:flex-row justify-between items-center">
-            <div class="flex items-center space-x-5">
-                <div class="p-3 bg-indigo-500 rounded-2xl shadow-inner">
-                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+<body class="p-4 md:p-8">
+    <div class="max-w-[1850px] mx-auto">
+        <!-- Header -->
+        <header class="flex flex-col md:flex-row justify-between items-center mb-8 gap-6 bg-white p-8 rounded-3xl shadow-sm border border-slate-200">
+            <div class="flex items-center gap-6">
+                <div class="w-16 h-16 bg-slate-900 rounded-2xl flex items-center justify-center text-white">
+                    <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" stroke-width="2"/></svg>
                 </div>
                 <div>
-                    <h1 class="text-2xl font-black tracking-tight leading-none text-white">工單生產數據分析看板</h1>
-                    <p class="text-indigo-300 text-sm mt-1 font-bold tracking-widest uppercase">Visual Intelligence • Crafted by 勝全 · Powered by AI</p>
+                    <h1 class="text-3xl font-black tracking-tight text-slate-800">產能效率異常追蹤</h1>
+                    <div class="flex items-center gap-3 mt-1">
+                        <span class="px-3 py-1 bg-amber-100 text-amber-700 text-xs font-black rounded-full uppercase">Professional Edition</span>
+                        <div class="h-4 w-[1px] bg-slate-200"></div>
+                        <p class="text-slate-500 font-bold text-base">時間精準配對模式</p>
+                    </div>
                 </div>
             </div>
-            <div id="status-display" class="hidden mt-4 md:mt-0 flex items-center space-x-3 px-6 py-2 bg-indigo-500/20 border border-indigo-500/30 rounded-full">
-                <span class="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-pulse"></span>
-                <span class="text-sm font-bold" id="status-text">系統準備中...</span>
+            <div class="bg-slate-50 px-10 py-4 rounded-2xl border border-slate-200 flex flex-col items-center">
+                <span class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">System Origin</span>
+                <span class="text-2xl font-black text-slate-800 tracking-tight">Crafted by 勝全 · Powered by AI</span>
             </div>
-        </div>
-    </header>
+        </header>
 
-    <main class="max-w-[1600px] mx-auto px-6 py-8">
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            <!-- 左側控制欄 -->
-            <aside class="lg:col-span-3 space-y-8">
-                <section class="bento-card p-6">
-                    <h2 class="text-lg font-black text-slate-800 mb-6 flex items-center">
-                        <span class="w-1.5 h-6 bg-indigo-600 mr-3 rounded-full"></span>
-                        數據匯入
-                    </h2>
-                    <label for="file-upload" id="drop-zone" class="upload-area w-full h-48 rounded-2xl flex flex-col items-center justify-center space-y-3 group transition-all text-center px-4">
-                        <div id="upload-icon" class="p-4 bg-white rounded-full shadow-sm group-hover:scale-110 transition-transform">
-                            <svg class="w-10 h-10 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
-                        </div>
-                        <div id="file-info-container">
-                            <span id="file-instruction" class="block text-sm font-black text-slate-700">請上傳工單人員記錄表</span>
-                            <span id="file-name-display" class="hidden block text-sm font-black text-indigo-600 break-all bg-indigo-50 px-3 py-1 mt-2 rounded-lg border border-indigo-100 italic">尚未選取檔案</span>
-                        </div>
-                        <input type="file" id="file-upload" class="hidden" accept=".csv, .xlsx" onchange="onFileChanged(this)">
-                    </label>
-                    <button id="analyze-btn" onclick="triggerProcess()" disabled class="btn-primary w-full mt-6 disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none">啟動深度分析</button>
-                </section>
+        <!-- Control Center (Uploads) -->
+        <section class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            <div id="zoneEff" class="upload-zone card-main p-6 flex items-center gap-5">
+                <input type="file" id="fileEff" onchange="handleFileUpload('eff')">
+                <div id="iconEff" class="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" stroke-width="2"/></svg>
+                </div>
+                <div class="flex-grow">
+                    <h3 class="text-sm font-black text-slate-400 uppercase">Step 1</h3>
+                    <p id="labelEff" class="text-base font-bold text-slate-700 truncate">點擊上傳"在製生產統計清單"</p>
+                </div>
+            </div>
 
-                <section id="filter-card" class="bento-card p-6 hidden">
-                    <h2 class="text-lg font-black text-slate-800 mb-6 flex items-center">
-                        <span class="w-1.5 h-6 bg-indigo-600 mr-3 rounded-full"></span>
-                        智慧篩選
-                    </h2>
-                    <div class="space-y-6">
-                        <div>
-                            <label class="stat-label block mb-3">分析日期區間</label>
-                            <select id="date-picker" onchange="refreshView()" class="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-4 text-xl font-black text-slate-700 focus:border-indigo-500 outline-none">
-                                <option value="ALL">全部紀錄</option>
-                            </select>
+            <div id="zoneHist" class="upload-zone card-main p-6 flex items-center gap-5">
+                <input type="file" id="fileHist" onchange="handleFileUpload('hist')">
+                <div id="iconHist" class="w-12 h-12 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" stroke-width="2"/></svg>
+                </div>
+                <div class="flex-grow">
+                    <h3 class="text-sm font-black text-slate-400 uppercase">Step 2</h3>
+                    <p id="labelHist" class="text-base font-bold text-slate-700 truncate">點擊上傳"生產批入出站紀錄"</p>
+                </div>
+            </div>
+
+            <button id="btnAnalyze" onclick="startAnalysis()" disabled class="btn-analyze rounded-2xl flex items-center justify-center gap-3 text-white font-black text-xl shadow-lg">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z" stroke-width="2"/></svg>
+                開始分析數據
+            </button>
+        </section>
+
+        <!-- Main Workspace -->
+        <main class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            <!-- Left: List & Filters -->
+            <aside class="lg:col-span-4 flex flex-col h-[850px]">
+                <div class="card-main flex flex-col h-full overflow-hidden">
+                    <div class="p-6 bg-slate-50 border-b border-slate-200 space-y-4">
+                        <div class="flex justify-between items-center">
+                            <h2 class="text-lg font-black text-slate-700 italic">異常追蹤與全域篩選</h2>
+                            <div class="flex items-center gap-2">
+                                 <div class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>
+                                 <span class="text-xs font-bold text-slate-400">排除組裝</span>
+                            </div>
                         </div>
-                        <div>
-                            <label class="stat-label block mb-3">廠區篩選</label>
-                            <div class="grid grid-cols-1 gap-3">
-                                <button onclick="setFactoryFilter('ALL')" id="factory-all" class="px-4 py-4 rounded-xl border-2 border-indigo-600 bg-indigo-600 text-white font-black text-lg">全部廠區</button>
-                                <button onclick="setFactoryFilter('G')" id="factory-g" class="px-4 py-4 rounded-xl border-2 border-slate-200 text-slate-600 font-black text-lg">宗瑋 (G)</button>
-                                <button onclick="setFactoryFilter('D')" id="factory-d" class="px-4 py-4 rounded-xl border-2 border-slate-200 text-slate-600 font-black text-lg">博士 (D)</button>
+
+                        <!-- 1. Date Multi-Select -->
+                        <div id="dateFilterSection" class="hidden border-b border-slate-200 pb-3">
+                            <span class="text-[10px] font-black text-slate-400 uppercase mb-2 block">1. 選擇生產日期 (多選)</span>
+                            <div id="dateChips" class="flex flex-wrap gap-2 max-h-24 overflow-y-auto scroll-style pb-1"></div>
+                        </div>
+
+                        <!-- 2. Global Operator Search -->
+                        <div id="opFilterSection" class="hidden border-b border-slate-200 pb-3">
+                            <span class="text-[10px] font-black text-slate-400 uppercase mb-2 block">2. 鎖定操作員 (跨工單搜尋)</span>
+                            <div class="relative">
+                                <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" stroke-width="2"/></svg>
+                                </span>
+                                <input 
+                                    type="text" 
+                                    id="globalOpSearch" 
+                                    onkeyup="renderRankingList()"
+                                    placeholder="輸入操作員姓名..." 
+                                    class="w-full bg-white border border-slate-200 rounded-lg py-2 pl-9 pr-4 text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500/20"
+                                >
+                            </div>
+                        </div>
+
+                        <!-- 3. General Search -->
+                        <div class="relative">
+                            <span class="text-[10px] font-black text-slate-400 uppercase mb-2 block">3. 關鍵字搜尋</span>
+                            <div class="relative">
+                                <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-width="2"/></svg>
+                                </span>
+                                <input 
+                                    type="text" 
+                                    id="searchInput" 
+                                    onkeyup="renderRankingList()"
+                                    placeholder="工單、產品編號..." 
+                                    class="search-input w-full bg-white border border-slate-200 rounded-xl py-2 pl-10 pr-4 text-sm font-bold outline-none"
+                                >
                             </div>
                         </div>
                     </div>
-                </section>
+                    
+                    <div id="rankingList" class="flex-grow overflow-y-auto scroll-style p-5 space-y-4">
+                        <div class="flex flex-col items-center justify-center h-full opacity-30 text-center">
+                            <p class="text-xl font-black">等待檔案上傳並點擊分析</p>
+                        </div>
+                    </div>
+                </div>
             </aside>
 
-            <!-- 右側內容區 -->
-            <div class="lg:col-span-9 space-y-8">
-                <!-- 數據卡片區 -->
-                <div id="stats-dashboard" class="grid grid-cols-1 gap-8 hidden">
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div class="bento-card p-8 bg-indigo-50 border-indigo-100 flex flex-col justify-center">
-                            <p class="stat-label mb-3 text-indigo-600">上工總人數</p>
-                            <div class="flex items-end"><span id="stat-workers" class="stat-number text-indigo-700">0</span><span class="text-xl font-black text-indigo-400 ml-2">人</span></div>
-                        </div>
-                        <div class="bento-card p-8 bg-rose-50 border-rose-100 flex flex-col justify-center">
-                            <p class="stat-label text-rose-600 mb-3">工時異常人數</p>
-                            <div class="flex items-end"><span id="stat-abnormal" class="stat-number text-rose-700">0</span><span id="stat-ab-perc" class="text-xl font-black text-rose-400 ml-2">0%</span></div>
-                            <p class="text-[10px] text-rose-400 font-bold mt-2 uppercase tracking-tighter">Based on actual working days</p>
-                        </div>
-                        <div id="card-avg" class="bento-card p-8 bg-emerald-50 border-emerald-100 flex flex-col justify-center transition-colors duration-300">
-                            <p id="label-avg" class="stat-label text-emerald-600 mb-3">人均生產工時</p>
-                            <div class="flex items-end"><span id="stat-avg" class="stat-number text-emerald-700">00:00:00</span><span id="unit-avg" class="text-xl font-black text-emerald-400 ml-2">H/人</span></div>
-                            <p id="note-avg" class="text-[10px] font-black mt-2 opacity-80 text-emerald-500 uppercase tracking-tighter">*Dynamic Benchmarking enabled</p>
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-1 xl:grid-cols-12 gap-8">
-                        <div class="bento-card p-6 xl:col-span-5">
-                            <h3 class="text-lg font-black text-slate-800 mb-4 border-l-6 border-indigo-500 pl-4">廠區人數分佈</h3>
-                            <div class="chart-wrapper">
-                                <div class="chart-canvas-container-narrow shrink-0">
-                                    <canvas id="chart-factory"></canvas>
+            <!-- Right: Details -->
+            <section class="lg:col-span-8 flex flex-col gap-8">
+                <!-- Record Hero -->
+                <div id="auditHeader" class="card-main p-8 border-l-[16px] border-slate-200 opacity-30 transition-all duration-500">
+                    <div class="flex flex-col xl:flex-row justify-between items-start gap-8">
+                        <div class="space-y-4 flex-grow">
+                            <div class="flex items-center gap-3">
+                                <span class="bg-slate-900 text-white text-xs font-black px-4 py-1.5 rounded-lg tracking-widest">工單編號</span>
+                                <h2 id="activeWO" class="text-5xl font-black metric-font text-slate-900">--</h2>
+                            </div>
+                            <div class="space-y-1">
+                                <h3 id="activeProd" class="text-2xl font-black text-slate-800">選取左側工單開始稽核</h3>
+                                <div class="flex items-center gap-2">
+                                    <span id="activeProdID" class="text-lg font-black text-blue-600/70 metric-font">--</span>
                                 </div>
-                                <div id="legend-factory" class="chart-legend-container"></div>
+                            </div>
+                            <!-- 恢復的時間比對區塊 -->
+                            <div class="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-slate-100">
+                                <div class="bg-blue-50/50 p-3 rounded-xl border border-blue-100">
+                                    <span class="text-[10px] font-black text-blue-400 uppercase block mb-1">實際生產時間 (進站基準)</span>
+                                    <span id="targetStartTime" class="text-sm font-bold text-blue-700 metric-font">--</span>
+                                </div>
+                                <div class="bg-orange-50/50 p-3 rounded-xl border border-orange-100">
+                                    <span class="text-[10px] font-black text-orange-400 uppercase block mb-1">實際完成時間 (出站基準)</span>
+                                    <span id="targetFinishTime" class="text-sm font-bold text-orange-700 metric-font">--</span>
+                                </div>
                             </div>
                         </div>
-                        <div class="bento-card p-6 xl:col-span-7">
-                            <h3 class="text-lg font-black text-slate-800 mb-4 border-l-6 border-emerald-500 pl-4">製程人力分配 (Top 10)</h3>
-                            <div class="chart-wrapper">
-                                <div class="chart-canvas-container-wide shrink-0">
-                                    <canvas id="chart-process"></canvas>
-                                </div>
-                                <div id="legend-process" class="chart-legend-container"></div>
-                            </div>
+                        <div class="bg-white p-6 rounded-3xl shadow-inner border border-slate-100 min-w-[200px] text-center">
+                            <p class="text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Efficiency Rating</p>
+                            <div id="activeEff" class="text-huge font-black metric-font text-slate-300">--%</div>
                         </div>
                     </div>
                 </div>
 
-                <!-- 列表顯示區 -->
-                <section id="table-container" class="bento-card hidden overflow-hidden">
-                    <div class="px-8 py-8 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
-                        <h2 class="text-2xl font-black text-slate-800 flex items-center">人員效率分析明細</h2>
-                        <span id="row-count" class="text-md font-black bg-indigo-600 text-white px-5 py-2 rounded-xl"></span>
+                <!-- History Context -->
+                <div class="card-main flex flex-col h-[550px] overflow-hidden">
+                    <div class="p-6 border-b border-slate-100 bg-slate-50/40">
+                        <div class="flex flex-col md:flex-row justify-between items-center gap-4">
+                            <div class="flex items-center gap-3">
+                                <div class="p-2 bg-blue-100 text-blue-600 rounded-lg">
+                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" stroke-width="2"/></svg>
+                                </div>
+                                <h3 class="text-xl font-black text-slate-800 tracking-tight">履歷時間軸比對</h3>
+                            </div>
+                            
+                            <div class="flex items-center gap-4 bg-white px-5 py-2.5 rounded-2xl border border-slate-200 shadow-sm">
+                                <span class="text-sm font-black text-slate-600 leading-tight">僅顯示時間吻合</span>
+                                <label class="switch">
+                                    <input type="checkbox" id="matchOnlyToggle" checked onchange="refreshAuditTable()">
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                        </div>
                     </div>
-                    <div class="overflow-x-auto">
-                        <table class="data-table w-full">
-                            <thead>
+
+                    <div class="overflow-auto scroll-style flex-grow">
+                        <table class="w-full text-left border-separate border-spacing-0">
+                            <thead class="sticky top-0 z-20 bg-white">
                                 <tr>
-                                    <th class="text-left cursor-pointer" onclick="handleSort(0)">員工代號 <span id="s-0"></span></th>
-                                    <th class="text-left">姓名</th>
-                                    <th class="text-center">模式</th>
-                                    <th class="text-left cursor-pointer" onclick="handleSort(2)">總淨生產工時 <span id="s-2">▼</span></th>
-                                    <th id="th-avg-daily" class="text-left">平均每日工時</th>
-                                    <th class="text-center">累計單數</th>
+                                    <th class="p-5 text-xs font-black text-slate-400 border-b uppercase">動作</th>
+                                    <th class="p-5 text-xs font-black text-slate-400 border-b uppercase">製程 / 設備</th>
+                                    <th class="p-5 text-xs font-black text-slate-500 border-b uppercase text-blue-600">執行時間</th>
+                                    <th class="p-5 text-xs font-black text-slate-400 border-b uppercase text-center">數量</th>
+                                    <th class="p-5 text-xs font-black text-slate-400 border-b uppercase">操作員</th>
                                 </tr>
                             </thead>
-                            <tbody id="main-table-body" class="bg-white"></tbody>
-                        </table>
-                    </div>
-                </section>
-            </div>
-        </div>
-    </main>
-
-    <!-- 人員詳情 Modal -->
-    <div id="modal-backdrop" class="fixed inset-0 bg-slate-900/90 backdrop-blur-xl hidden z-50 flex items-center justify-center p-6" onclick="closeModal()">
-        <div class="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-7xl max-h-[94vh] flex flex-col overflow-hidden" onclick="event.stopPropagation()">
-            <!-- Modal Header -->
-            <div class="p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                <div class="flex items-center space-x-6">
-                    <div class="w-20 h-20 bg-indigo-600 rounded-[1.5rem] flex items-center justify-center text-white text-3xl font-black shadow-lg" id="modal-avatar">?</div>
-                    <div>
-                        <div class="flex items-center">
-                            <h3 id="m-name" class="text-3xl font-black text-slate-900 tracking-tight">載入中...</h3>
-                            <span id="m-shift-tag" class="ml-4 px-4 py-1.5 rounded-xl text-xs font-black uppercase shadow-sm"></span>
-                        </div>
-                        <p id="m-meta" class="text-slate-500 font-bold mt-2 text-lg"></p>
-                    </div>
-                </div>
-                <button onclick="closeModal()" class="p-4 bg-slate-100 hover:bg-rose-100 hover:text-rose-600 rounded-full transition-all duration-300">
-                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12"/></svg>
-                </button>
-            </div>
-
-            <!-- Modal Body -->
-            <div class="p-10 overflow-y-auto space-y-12">
-                <!-- 時序圖區塊 (方案一：分日顯示) -->
-                <div>
-                    <h4 class="text-xl font-black text-slate-800 mb-8 flex items-center">
-                        <span class="w-2 h-2 bg-indigo-600 rounded-full mr-3"></span>
-                        生產時序分布 (分日視覺化)
-                        <span class="ml-4 text-xs font-bold text-slate-400 bg-slate-100 px-3 py-1 rounded-full">滑鼠懸停區塊可查看細節</span>
-                    </h4>
-                    <div id="modal-timeline-v2" class="space-y-2 pt-6">
-                        <!-- 由 JS 生成分日橫條 -->
-                    </div>
-                </div>
-
-                <!-- 數據表格 -->
-                <div class="space-y-6">
-                    <h4 class="text-xl font-black text-slate-800 flex items-center">
-                        <span class="w-2 h-2 bg-emerald-500 rounded-full mr-3"></span>
-                        工單明細紀錄
-                    </h4>
-                    <div class="rounded-3xl border border-slate-100 overflow-hidden">
-                        <table class="w-full">
-                            <thead class="bg-slate-50">
-                                <tr class="text-[11px] font-black text-slate-500 uppercase tracking-widest">
-                                    <th class="px-8 py-5 text-left">製程階段</th>
-                                    <th class="px-8 py-5 text-left">工單單號</th>
-                                    <th class="px-8 py-5 text-left">生產時間區間</th>
-                                    <th class="px-8 py-5 text-right">作業工時</th>
-                                </tr>
-                            </thead>
-                            <tbody id="m-table-body" class="divide-y divide-slate-50 text-slate-700 font-bold text-sm"></tbody>
+                            <tbody id="auditTableBody" class="divide-y divide-slate-50"></tbody>
                         </table>
                     </div>
                 </div>
-            </div>
-        </div>
+            </section>
+        </main>
     </div>
 
     <script>
-        let rawRecords = [];
-        let processedData = {};
-        let tableData = [];
-        let currentFactory = 'ALL';
-        let currentSort = { col: 2, dir: 'desc' };
-        let charts = {}; 
-        
-        const KEYS = { ID: '員工代號', NAME: '員工姓名', START: '開始生產時間', END: '結束生產時間', PROC: '製程', ORDER: '工單單號' };
-        const ERR_MIN = 8 * 3600 * 1000;
-        const ERR_MAX = 14 * 3600 * 1000;
+        let rawEff = [];
+        let rawHist = [];
+        let masterData = []; 
+        let selectedDates = new Set();
+        let status = { eff: false, hist: false };
+        let currentSelectedMaster = null;
 
-        // Tooltip 控制邏輯
-        const tooltip = document.getElementById('custom-tooltip');
-        function showTooltip(e, content) {
-            tooltip.innerHTML = content;
-            tooltip.style.display = 'block';
-            updateTooltipPos(e);
-        }
-        function updateTooltipPos(e) {
-            tooltip.style.left = (e.clientX + 15) + 'px';
-            tooltip.style.top = (e.clientY + 15) + 'px';
-        }
-        function hideTooltip() { tooltip.style.display = 'none'; }
+        function handleFileUpload(type) {
+            const input = document.getElementById(type === 'eff' ? 'fileEff' : 'fileHist');
+            const label = document.getElementById(type === 'eff' ? 'labelEff' : 'labelHist');
+            const zone = document.getElementById(type === 'eff' ? 'zoneEff' : 'zoneHist');
+            const file = input.files[0];
+            if (!file) return;
 
-        window.onload = function() {
-            if (typeof Chart !== 'undefined' && typeof ChartDataLabels !== 'undefined') {
-                Chart.register(ChartDataLabels);
-            }
-        };
-
-        function fmtHms(ms) {
-            if (isNaN(ms) || ms < 0) return "00:00:00";
-            let s = Math.floor(ms / 1000);
-            return `${String(Math.floor(s/3600)).padStart(2,'0')}:${String(Math.floor((s%3600)/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
-        }
-        function fmtDt(ts) { const d = new Date(ts); return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; }
-        function fmtHTime(ts) { const d = new Date(ts); return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; }
-        function fmtDay(ts) { const d = new Date(ts); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
-
-        function setStatus(msg) {
-            const box = document.getElementById('status-display');
-            box.classList.remove('hidden');
-            document.getElementById('status-text').innerText = msg;
-        }
-
-        function onFileChanged(input) {
-            const fileName = input.files[0] ? input.files[0].name : "";
-            const nameDisplay = document.getElementById('file-name-display');
-            const instruction = document.getElementById('file-instruction');
-            const dropZone = document.getElementById('drop-zone');
-
-            if (fileName) {
-                nameDisplay.innerText = fileName;
-                nameDisplay.classList.remove('hidden');
-                instruction.classList.add('hidden');
-                dropZone.classList.add('has-file');
-                document.getElementById('analyze-btn').disabled = false;
-            } else {
-                nameDisplay.classList.add('hidden');
-                instruction.classList.remove('hidden');
-                dropZone.classList.remove('has-file');
-                document.getElementById('analyze-btn').disabled = true;
-            }
-        }
-
-        async function triggerProcess() {
-            setStatus("深度分析數據中...");
-            const file = document.getElementById('file-upload').files[0];
             const reader = new FileReader();
-            reader.onload = async (e) => {
-                const wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
-                rawRecords = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
-                
-                // 處理日期選單
-                const dates = [...new Set(rawRecords.map(r => r[KEYS.START] ? fmtDay(new Date(r[KEYS.START])) : null).filter(Boolean))].sort().reverse();
-                const dp = document.getElementById('date-picker');
-                dp.innerHTML = '<option value="ALL">全部紀錄 (累計)</option>';
-                dates.forEach(d => dp.innerHTML += `<option value="${d}">${d}</option>`);
-                if(dates.length) dp.value = dates[0];
-
-                document.getElementById('filter-card').classList.remove('hidden');
-                document.getElementById('stats-dashboard').classList.remove('hidden');
-                document.getElementById('table-container').classList.remove('hidden');
-                refreshView();
-                setStatus("分析報告已更新");
+            reader.onload = (e) => {
+                const data = e.target.result;
+                const callback = (parsed) => {
+                    if (type === 'eff') rawEff = parsed; else rawHist = parsed;
+                    status[type] = true;
+                    label.innerText = file.name;
+                    zone.classList.add('success');
+                    checkReady();
+                };
+                if (file.name.endsWith('.csv')) {
+                    Papa.parse(data, { header: true, skipEmptyLines: true, complete: (res) => callback(res.data) });
+                } else {
+                    const wb = XLSX.read(data, { type: 'binary' });
+                    callback(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]));
+                }
             };
-            reader.readAsArrayBuffer(file);
+            if (file.name.endsWith('.csv')) reader.readAsText(file); else reader.readAsBinaryString(file);
         }
 
-        // 計算日班區間內的工時 (07:30 - 19:30) 用於判斷班別
-        function getDayShiftMs(start, end) {
-            let total = 0;
-            let cur = new Date(start);
-            const targetEnd = new Date(end);
-            while (cur < targetEnd) {
-                let dStart = new Date(cur); dStart.setHours(7, 30, 0, 0);
-                let dEnd = new Date(cur); dEnd.setHours(19, 30, 0, 0);
-                let oS = Math.max(cur.getTime(), dStart.getTime());
-                let oE = Math.min(targetEnd.getTime(), dEnd.getTime());
-                if (oE > oS) total += (oE - oS);
-                let next = new Date(cur); next.setDate(next.getDate() + 1); next.setHours(0, 0, 0, 0);
-                cur = next < targetEnd ? next : targetEnd;
-            }
-            return total;
+        function checkReady() {
+            if (status.eff && status.hist) document.getElementById('btnAnalyze').disabled = false;
         }
 
-        function refreshView() {
-            const filterDate = document.getElementById('date-picker').value;
-            let targetRecords = filterDate === 'ALL' ? rawRecords : rawRecords.filter(r => fmtDay(new Date(r[KEYS.START])) === filterDate);
+        function parseEfficiency(val) {
+            if (!val) return 0;
+            let n = typeof val === 'string' ? parseFloat(val.replace('%', '')) : val;
+            if (n > 0 && n <= 2 && !String(val).includes('%')) n *= 100;
+            return n || 0;
+        }
+
+        function startAnalysis() {
+            masterData = rawEff.filter(d => {
+                const woPrefix = String(d.工單編號 || '').substring(0, 4);
+                const isAssemblyWO = woPrefix === 'GE31' || woPrefix === 'DE31';
+                const isAssemblyProcess = String(d.製程 || '').includes('組裝');
+                return !isAssemblyWO && !isAssemblyProcess;
+            }).map((d, i) => {
+                const startDt = d.實際生產日 ? d.實際生產日.trim() : null;
+                const finishDt = d.實際完成日 ? d.實際完成日.trim() : null;
+                const dateKey = d.實際完成日 ? d.實際完成日.split(' ')[0] : 'N/A';
+                return {
+                    ...d,
+                    id: i,
+                    effVal: parseEfficiency(d.產能效率),
+                    isAnomaly: parseEfficiency(d.產能效率) > 100,
+                    startDt,
+                    finishDt,
+                    dateKey
+                };
+            }).sort((a, b) => b.effVal - a.effVal);
+
+            setupDateFilter();
+            document.getElementById('opFilterSection').classList.remove('hidden');
+            renderRankingList();
+        }
+
+        function setupDateFilter() {
+            const dateSection = document.getElementById('dateFilterSection');
+            const chips = document.getElementById('dateChips');
+            const dates = [...new Set(masterData.map(d => d.dateKey))].sort().reverse();
             
-            processedData = {};
-            const opMap = {};
-            const processUsers = {};
-
-            targetRecords.forEach(r => {
-                const id = r[KEYS.ID], start = new Date(r[KEYS.START]).getTime(), end = new Date(r[KEYS.END]).getTime(), proc = r[KEYS.PROC] || '未分類';
-                if (!id || isNaN(start) || isNaN(end) || end <= start) return;
-                
-                if (!opMap[id]) opMap[id] = { name: r[KEYS.NAME]||'?', intervals: [], raw: [], min: Infinity, max: -Infinity, dates: new Set() };
-                opMap[id].intervals.push({start, end, proc, order: r[KEYS.ORDER]});
-                opMap[id].raw.push(r);
-                opMap[id].min = Math.min(opMap[id].min, start);
-                opMap[id].max = Math.max(opMap[id].max, end);
-                opMap[id].dates.add(fmtDay(new Date(r[KEYS.START])));
-
-                if(!processUsers[proc]) processUsers[proc] = new Set();
-                processUsers[proc].add(id);
-            });
-
-            tableData = [];
-            for (const id in opMap) {
-                const data = opMap[id];
-                data.intervals.sort((a,b) => a.start - b.start);
-                
-                let totalDayMs = 0;
-                let totalWorkMs = 0;
-                data.intervals.forEach(i => {
-                    totalWorkMs += (i.end - i.start);
-                    totalDayMs += getDayShiftMs(i.start, i.end);
+            if (dates.length > 0) {
+                dateSection.classList.remove('hidden');
+                chips.innerHTML = '';
+                dates.forEach(date => {
+                    const btn = document.createElement('div');
+                    btn.className = 'filter-chip';
+                    btn.innerText = date;
+                    btn.onclick = () => {
+                        if (selectedDates.has(date)) selectedDates.delete(date);
+                        else selectedDates.add(date);
+                        btn.classList.toggle('active');
+                        renderRankingList();
+                    };
+                    chips.appendChild(btn);
                 });
+            }
+        }
 
-                const shift = (totalDayMs >= (totalWorkMs * 0.5)) ? 'DAY' : 'NIGHT';
+        function renderRankingList() {
+            const query = document.getElementById('searchInput').value.toLowerCase();
+            const opQuery = document.getElementById('globalOpSearch').value.toLowerCase();
+            const list = document.getElementById('rankingList');
+            list.innerHTML = '';
 
-                // 計算重疊塊
-                let overlapCheck = [], sortedPoints = [];
-                data.intervals.forEach(i => { 
-                    sortedPoints.push({time: i.start, type: 1, info: i}); 
-                    sortedPoints.push({time: i.end, type: -1, info: i}); 
+            let operatorWOs = new Set();
+            if (opQuery) {
+                rawHist.forEach(log => {
+                    if (String(log.操作員).toLowerCase().includes(opQuery)) {
+                        operatorWOs.add(String(log.工單編號));
+                    }
                 });
-                sortedPoints.sort((a,b) => a.time - b.time || a.type);
-                
-                let active = 0, currentStart = null;
-                let activeIntervals = new Set();
-                for(let p of sortedPoints) {
-                    if(active > 0 && currentStart !== null && p.time > currentStart) {
-                        overlapCheck.push({
-                            start: currentStart, 
-                            end: p.time, 
-                            count: active,
-                            details: Array.from(activeIntervals)
-                        });
-                    }
-                    if (p.type === 1) { active++; activeIntervals.add(p.info); }
-                    else { active--; activeIntervals.delete(p.info); }
-                    currentStart = p.time;
-                }
-
-                // 計算淨生產工時 (扣除重疊後的連續段)
-                let netTotal = 0;
-                if(data.intervals.length) {
-                    let s = data.intervals[0].start, e = data.intervals[0].end;
-                    for(let i=1; i<data.intervals.length; i++) {
-                        if(data.intervals[i].start <= e) e = Math.max(e, data.intervals[i].end);
-                        else { netTotal += (e-s); s = data.intervals[i].start; e = data.intervals[i].end; }
-                    }
-                    netTotal += (e-s);
-                }
-                
-                const dayCount = data.dates.size || 1; 
-                const obj = { id, name: data.name, totalMs: netTotal, count: data.raw.length, shift, dayCount };
-                tableData.push(obj);
-                processedData[id] = { ...obj, raw: data.raw, min: data.min, max: data.max, overlapBlocks: overlapCheck };
             }
 
-            renderDashboard(processUsers);
-            renderView();
-        }
-
-        function renderDashboard(processUsers) {
-            let filtered = tableData.filter(d => {
-                if (currentFactory === 'G') return String(d.id).startsWith('G');
-                if (currentFactory === 'D') return String(d.id).startsWith('D');
-                return true;
+            const filtered = masterData.filter(item => {
+                const matchSearch = String(item.工單編號).toLowerCase().includes(query) || 
+                                    String(item.產品名稱).toLowerCase().includes(query) ||
+                                    String(item.產品編號).toLowerCase().includes(query);
+                const matchDate = selectedDates.size === 0 || selectedDates.has(item.dateKey);
+                const matchOperator = opQuery === '' || operatorWOs.has(String(item.工單編號));
+                return matchSearch && matchDate && matchOperator;
             });
 
-            let ab = 0, sum = 0, gCount = 0, dCount = 0, totalDaysAccumulated = 0;
-            filtered.forEach(d => {
-                sum += d.totalMs;
-                totalDaysAccumulated += d.dayCount;
-                if (d.totalMs < (ERR_MIN * d.dayCount) || d.totalMs > (ERR_MAX * d.dayCount)) ab++;
-                if (String(d.id).startsWith('G')) gCount++; else if (String(d.id).startsWith('D')) dCount++;
-            });
-
-            document.getElementById('stat-workers').innerText = filtered.length;
-            document.getElementById('stat-abnormal').innerText = ab;
-            document.getElementById('stat-ab-perc').innerText = filtered.length ? Math.round(ab/filtered.length*100) + '%' : '0%';
-            
-            const avgMs = filtered.length ? sum/filtered.length : 0;
-            document.getElementById('stat-avg').innerText = fmtHms(avgMs);
-            const avgDays = filtered.length ? totalDaysAccumulated / filtered.length : 1;
-
-            // 調整卡片顏色
-            const card = document.getElementById('card-avg');
-            if (avgMs < ERR_MIN * avgDays) {
-                card.className = 'bento-card p-8 bg-amber-50 border-amber-100 flex flex-col justify-center transition-all';
-            } else if (avgMs > ERR_MAX * avgDays) {
-                card.className = 'bento-card p-8 bg-rose-50 border-rose-100 flex flex-col justify-center transition-all';
-            } else {
-                card.className = 'bento-card p-8 bg-emerald-50 border-emerald-100 flex flex-col justify-center transition-all';
+            if (filtered.length === 0) {
+                list.innerHTML = `<div class="p-10 text-center text-slate-400 font-bold">找不到符合條件的工單</div>`;
+                return;
             }
+
+            filtered.forEach(item => {
+                const card = document.createElement('div');
+                const isActive = currentSelectedMaster?.id === item.id;
+                card.className = `ranking-item card-main p-6 cursor-pointer relative ${item.isAnomaly ? 'is-anomaly' : ''} ${isActive ? 'active' : ''}`;
+                card.onclick = () => selectMaster(item, card);
+                card.innerHTML = `
+                    <div class="flex justify-between items-center">
+                        <div class="min-w-0 pr-4">
+                            <div class="flex items-center gap-3 mb-2">
+                                <span class="text-xs font-black text-slate-400 metric-font">${item.工單編號}</span>
+                                ${item.isAnomaly ? '<span class="bg-red-600 text-white text-[8px] px-1.5 py-0.5 rounded font-black uppercase">Anomaly</span>' : ''}
+                            </div>
+                            <h4 class="text-lg font-black text-slate-800 truncate mb-1">${item.產品名稱 || '---'}</h4>
+                            <p class="text-[10px] text-slate-500 font-bold uppercase tracking-tight">完成日: ${item.實際完成日 || 'N/A'}</p>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-2xl font-black metric-font ${item.isAnomaly ? 'text-red-600' : 'text-blue-600'}">${item.effVal.toFixed(1)}%</div>
+                        </div>
+                    </div>
+                `;
+                list.appendChild(card);
+            });
+        }
+
+        function selectMaster(item, element) {
+            document.querySelectorAll('.ranking-item').forEach(el => el.classList.remove('active'));
+            element.classList.add('active');
+            currentSelectedMaster = item;
             
-            updateChartWithLegend('chart-factory', 'legend-factory', ['宗瑋 (G)', '博士 (D)'], [gCount, dCount], ['#6366f1', '#f43f5e']);
+            document.getElementById('auditHeader').style.opacity = '1';
+            document.getElementById('activeWO').innerText = item.工單編號;
+            document.getElementById('activeProd').innerText = item.產品名稱 || 'Unknown';
+            document.getElementById('activeProdID').innerText = item.產品編號 || 'N/A';
+            document.getElementById('activeEff').innerText = `${item.effVal.toFixed(1)}%`;
+            document.getElementById('activeEff').className = `text-huge font-black metric-font ${item.isAnomaly ? 'text-red-600' : 'text-blue-600'}`;
+            
+            // 恢復時間顯示
+            document.getElementById('targetStartTime').innerText = item.實際生產日 || 'N/A';
+            document.getElementById('targetFinishTime').innerText = item.實際完成日 || 'N/A';
 
-            const sortedProc = Object.entries(processUsers).map(([k,v]) => [k, v.size]).sort((a,b) => b[1]-a[1]);
-            const topProc = sortedProc.slice(0, 10);
-            updateChartWithLegend('chart-process', 'legend-process', topProc.map(p=>p[0]), topProc.map(p=>p[1]), ['#10b981', '#6366f1', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4', '#f97316', '#84cc16', '#a855f7', '#94a3b8']);
+            refreshAuditTable();
         }
 
-        function updateChartWithLegend(canvasId, legendId, labels, data, colors) {
-            if (charts[canvasId]) charts[canvasId].destroy();
-            const total = data.reduce((a, b) => a + b, 0);
-            const ctx = document.getElementById(canvasId).getContext('2d');
-            charts[canvasId] = new Chart(ctx, {
-                type: 'doughnut', data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 2, borderColor: '#fff' }] },
-                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, datalabels: { display: false } }, cutout: '75%' }
-            });
-            const legendContainer = document.getElementById(legendId); legendContainer.innerHTML = '';
-            labels.forEach((label, i) => {
-                const percent = total > 0 ? ((data[i]/total)*100).toFixed(1) : 0;
-                legendContainer.innerHTML += `<div class="legend-item"><div class="flex items-center"><div class="legend-color" style="background:${colors[i]}"></div><span class="legend-text">${label}</span></div><span class="percent-text">${percent}%</span></div>`;
-            });
-        }
-
-        function renderView() {
-            let filtered = tableData.filter(d => {
-                if (currentFactory === 'G') return String(d.id).startsWith('G');
-                if (currentFactory === 'D') return String(d.id).startsWith('D');
-                return true;
-            });
-            filtered.sort((a,b) => {
-                let v1 = a.totalMs, v2 = b.totalMs;
-                if(currentSort.col === 0) { v1 = String(a.id); v2 = String(b.id); }
-                return currentSort.dir === 'asc' ? (v1 > v2 ? 1 : -1) : (v1 < v2 ? 1 : -1);
-            });
-
-            const filterDate = document.getElementById('date-picker').value;
-            const isAll = filterDate === 'ALL';
-            document.getElementById('th-avg-daily').style.display = isAll ? 'table-cell' : 'none';
-
-            const tbody = document.getElementById('main-table-body');
+        function refreshAuditTable() {
+            if (!currentSelectedMaster) return;
+            const master = currentSelectedMaster;
+            const matchOnly = document.getElementById('matchOnlyToggle').checked;
+            // 取得左側輸入的操作員名稱
+            const opQuery = document.getElementById('globalOpSearch').value.trim().toLowerCase();
+            const tbody = document.getElementById('auditTableBody');
             tbody.innerHTML = '';
-            filtered.forEach(d => {
-                let badgeClass = "bg-emerald-100 text-emerald-700";
-                if (d.totalMs < ERR_MIN * d.dayCount) badgeClass = "bg-amber-100 text-amber-700";
-                else if (d.totalMs > ERR_MAX * d.dayCount) badgeClass = "bg-rose-100 text-rose-700";
 
+            const expectedStart = master.startDt;
+            const expectedFinish = master.finishDt;
+
+            // 1. 取得該工單所有紀錄
+            const logs = rawHist.filter(d => 
+                String(d.工單編號) === String(master.工單編號) && 
+                !String(d.操作動作).includes('撤銷')
+            ).sort((a, b) => new Date(a.執行時間) - new Date(b.執行時間));
+
+            // 2. 標記邏輯：進站時間等於生產日、出站時間等於完成日 (精確比對)
+            // 考慮到秒數可能會有系統延遲，我們用字串前 16 位比對 (到分鐘)，或者使用非常小的 tolerance (1秒)
+            // 為了嚴謹依照指示 "實際生產時間=進站"，我們嘗試比對字串
+            
+            let processed = logs.map(l => {
+                const logTimeStr = l.執行時間 ? l.執行時間.trim() : '';
+                let isTimeMatched = false;
+                
+                // 比對邏輯
+                if (l.操作動作 === '進站' && expectedStart) {
+                    // 嘗試完全字串相等，或者時間戳記相差極小 (例如 < 2000ms)
+                    if (logTimeStr === expectedStart) isTimeMatched = true;
+                    else {
+                        const t1 = new Date(logTimeStr).getTime();
+                        const t2 = new Date(expectedStart).getTime();
+                        if (Math.abs(t1 - t2) < 2000) isTimeMatched = true; 
+                    }
+                } else if (l.操作動作 === '出站' && expectedFinish) {
+                    if (logTimeStr === expectedFinish) isTimeMatched = true;
+                    else {
+                        const t1 = new Date(logTimeStr).getTime();
+                        const t2 = new Date(expectedFinish).getTime();
+                        if (Math.abs(t1 - t2) < 2000) isTimeMatched = true;
+                    }
+                }
+                
+                return { ...l, isTimeMatched };
+            });
+
+            // 反轉順序以顯示最新在最上 (但如果是成對，通常想看 進 -> 出)
+            // 這裡顯示列表，通常依時間倒序
+            processed.reverse().forEach(log => {
+                if (matchOnly && !log.isTimeMatched) return;
+                
                 const tr = document.createElement('tr');
-                tr.className = "hover:bg-indigo-50/70 cursor-pointer group transition-colors border-b border-slate-50";
-                tr.onclick = () => openDetails(d.id);
+                tr.className = log.isTimeMatched ? 'time-match-highlight' : 'hover:bg-slate-50';
+                
+                // 操作員高亮邏輯
+                let operatorHtml = log.操作員 || '--';
+                if (opQuery && String(operatorHtml).toLowerCase().includes(opQuery)) {
+                    operatorHtml = `<span class="highlight-text">${operatorHtml}</span>`;
+                }
+
                 tr.innerHTML = `
-                    <td class="font-black text-slate-900 py-5 pl-8">${d.id}</td>
-                    <td class="font-bold text-slate-500">${d.name}</td>
-                    <td class="text-center"><span class="text-[10px] font-black px-3 py-1 rounded-lg ${d.shift==='DAY'?'bg-amber-100 text-amber-700':'bg-slate-800 text-white'}">${d.shift==='DAY'?'日班':'夜班'}</span></td>
-                    <td><span class="px-5 py-2 rounded-xl font-black ${badgeClass}">${fmtHms(d.totalMs)}</span></td>
-                    <td style="display:${isAll?'table-cell':'none'}" class="font-bold text-slate-400">${fmtHms(d.totalMs/d.dayCount)}</td>
-                    <td class="text-center font-black text-slate-300 text-lg">${d.count}</td>
+                    <td class="p-5">
+                        <span class="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest ${log.操作動作 === '出站' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'}">
+                            ${log.操作動作}
+                        </span>
+                    </td>
+                    <td class="p-5">
+                        <div class="font-black text-slate-800 text-sm">${log.製程 || '--'}</div>
+                        <div class="text-[9px] text-slate-400 font-bold">${log.設備 || '--'}</div>
+                    </td>
+                    <td class="p-5">
+                        <div class="metric-font font-black text-base ${log.isTimeMatched ? 'text-blue-700' : 'text-slate-500'}">${log.執行時間}</div>
+                        ${log.isTimeMatched ? `<div class="text-[8px] font-black text-amber-600 mt-0.5 uppercase tracking-tighter">吻合 (${log.操作動作 === '進站' ? '生產' : '完成'})</div>` : ''}
+                    </td>
+                    <td class="p-5 text-center font-black text-slate-800 text-lg">${log.數量 || 0}</td>
+                    <td class="p-5 font-bold text-slate-700 text-xs">${operatorHtml}</td>
                 `;
                 tbody.appendChild(tr);
             });
-            document.getElementById('row-count').innerText = `已顯示 ${filtered.length} 人`;
-        }
-
-        function handleSort(col) {
-            if(currentSort.col === col) currentSort.dir = currentSort.dir === 'asc' ? 'desc' : 'asc';
-            else { currentSort.col = col; currentSort.dir = 'desc'; }
-            renderView();
-        }
-
-        function setFactoryFilter(f) {
-            currentFactory = f;
-            ['ALL','G','D'].forEach(t => {
-                document.getElementById(`factory-${t.toLowerCase()}`).className = (t === f) ? "px-4 py-4 rounded-xl border-2 border-indigo-600 bg-indigo-600 text-white font-black text-lg" : "px-4 py-4 rounded-xl border-2 border-slate-200 text-slate-600 font-black text-lg";
-            });
-            refreshView(); 
-        }
-
-        function openDetails(id) {
-            const data = processedData[id];
-            document.getElementById('modal-avatar').innerText = data.name.charAt(0);
-            document.getElementById('m-name').innerText = `${data.id} ${data.name}`;
-            const shiftTag = document.getElementById('m-shift-tag');
-            shiftTag.innerText = data.shift === 'DAY' ? 'Day Shift Mode' : 'Night Shift Mode';
-            shiftTag.className = data.shift === 'DAY' ? 'ml-4 px-3 py-1 rounded-lg text-xs font-black bg-amber-100 text-amber-600' : 'ml-4 px-3 py-1 rounded-lg text-xs font-black bg-slate-900 text-white';
-            document.getElementById('m-meta').innerText = `總淨工時：${fmtHms(data.totalMs)} | 出勤天數：${data.dayCount} 天 | 總工單量：${data.count} 筆`;
-            
-            // --- 方案一：分日橫向時序圖 ---
-            const container = document.getElementById('modal-timeline-v2');
-            container.innerHTML = '';
-
-            // 按日期分組 blocks
-            const blocksByDate = {};
-            data.overlapBlocks.forEach(b => {
-                const day = fmtDay(new Date(b.start));
-                if (!blocksByDate[day]) blocksByDate[day] = [];
-                blocksByDate[day].push(b);
-            });
-
-            // 排序日期 (由新到舊)
-            const sortedDays = Object.keys(blocksByDate).sort().reverse();
-            const msPerDay = 24 * 3600 * 1000;
-
-            sortedDays.forEach(dayStr => {
-                const dayRow = document.createElement('div');
-                dayRow.className = "day-row";
-                
-                const label = document.createElement('div');
-                label.className = "day-label";
-                label.innerText = dayStr.split('-').slice(1).join('/'); // 顯示 01/19 格式
-                
-                const track = document.createElement('div');
-                track.className = "timeline-track";
-
-                // 背景：日班標示 (07:30 - 19:30)
-                const shiftZone = document.createElement('div');
-                shiftZone.className = "shift-zone";
-                shiftZone.style.left = (7.5 / 24 * 100) + '%';
-                shiftZone.style.width = (12 / 24 * 100) + '%';
-                track.appendChild(shiftZone);
-
-                // 時間刻度 (每 4 小時一格)
-                for(let h=0; h<=24; h+=4) {
-                    const grid = document.createElement('div');
-                    grid.className = "timeline-grid-v2";
-                    grid.style.left = (h / 24 * 100) + '%';
-                    if (h < 24) {
-                        const mark = document.createElement('div');
-                        mark.className = "hour-mark";
-                        mark.innerText = h + ':00';
-                        grid.appendChild(mark);
-                    }
-                    track.appendChild(grid);
-                }
-
-                // 渲染當日區塊
-                const dayStartTs = new Date(dayStr + "T00:00:00").getTime();
-                blocksByDate[dayStr].forEach(b => {
-                    const block = document.createElement('div');
-                    const isOverlap = b.count > 1;
-                    block.className = `block-v2 ${isOverlap ? 'bg-overlap-v2' : 'bg-normal-v2'}`;
-                    
-                    // 計算相對當天 0 點的百分比
-                    const startOffset = Math.max(0, b.start - dayStartTs);
-                    const duration = b.end - b.start;
-                    
-                    block.style.left = (startOffset / msPerDay * 100) + '%';
-                    block.style.width = Math.max(0.4, (duration / msPerDay * 100)) + '%';
-                    
-                    // Tooltip 內容預處理
-                    const detailHtml = b.details.map(d => `
-                        <div class="border-b border-white/10 pb-2 mb-2 last:border-0 last:mb-0">
-                            <div class="text-indigo-400 font-black">${d.order}</div>
-                            <div class="text-[11px] opacity-70">${d.proc}</div>
-                            <div class="text-[10px] mt-1 text-slate-300">${fmtHTime(d.start)} - ${fmtHTime(d.end)}</div>
-                        </div>
-                    `).join('');
-
-                    block.onmouseenter = (e) => showTooltip(e, `
-                        <div class="font-black text-rose-400 mb-2">${isOverlap ? '⚠️ 工時重疊 (同時執行多單)' : '✓ 正常生產'}</div>
-                        ${detailHtml}
-                    `);
-                    block.onmousemove = (e) => updateTooltipPos(e);
-                    block.onmouseleave = hideTooltip;
-
-                    track.appendChild(block);
-                });
-
-                dayRow.appendChild(label);
-                dayRow.appendChild(track);
-                container.appendChild(dayRow);
-            });
-
-            // 明細表格
-            const mtbody = document.getElementById('m-table-body');
-            mtbody.innerHTML = '';
-            data.raw.sort((a,b) => new Date(a[KEYS.START]) - new Date(b[KEYS.START])).forEach(r => {
-                const s = new Date(r[KEYS.START]), e = new Date(r[KEYS.END]);
-                mtbody.innerHTML += `<tr class="hover:bg-slate-50 transition-colors">
-                    <td class="px-8 py-4 text-slate-800">${r[KEYS.PROC]}</td>
-                    <td class="px-8 py-4 text-indigo-700 font-black">${r[KEYS.ORDER]}</td>
-                    <td class="px-8 py-4 text-slate-400 text-xs font-bold">${fmtDt(s)} - ${fmtDt(e)}</td>
-                    <td class="px-8 py-4 text-right font-black text-slate-900">${fmtHms(e-s)}</td>
-                </tr>`;
-            });
-            document.getElementById('modal-backdrop').classList.remove('hidden');
-        }
-
-        function closeModal() { 
-            document.getElementById('modal-backdrop').classList.add('hidden'); 
-            hideTooltip();
         }
     </script>
 </body>
