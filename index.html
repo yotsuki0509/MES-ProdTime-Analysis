@@ -1,67 +1,127 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html lang="zh-TW" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>作業員總生產時間分析 - </title>
+    <title>作業員總生產時間分析 - 戰情室看板</title>
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'Noto Sans TC', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'Courier New', 'monospace'], // 科技等寬字體
+                    },
+                    colors: {
+                        cyber: {
+                            bg: '#050b14',       // 極深海軍藍
+                            card: '#0a1220',     // 卡片底色
+                            border: '#1e3a5f',   // 基礎邊框
+                            cyan: '#00f3ff',     // 霓虹青藍
+                            blue: '#3b82f6',     // 科技藍
+                            pink: '#ff007f',     // 霓虹粉紅
+                            purple: '#b026ff'    // 雷射紫
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- SheetJS & Chart.js -->
     <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+    <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&family=JetBrains+Mono:wght@400;700;800&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
 
     <style>
-        :root {
-            --primary: #4f46e5;
-            --primary-dark: #3730a3;
-            --bg-main: #f1f5f9;
+        body { 
+            -webkit-font-smoothing: antialiased;
+            background-color: #050b14;
+            color: #e2e8f0;
+            /* 科技網格背景 */
+            background-image: 
+                linear-gradient(rgba(0, 243, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 243, 255, 0.03) 1px, transparent 1px);
+            background-size: 40px 40px;
+            background-position: center top;
         }
 
-        body { 
-            font-family: 'Inter', 'Noto Sans TC', sans-serif; 
-            background-color: var(--bg-main);
-            color: #0f172a;
-            -webkit-font-smoothing: antialiased;
-        }
+        /* 科技感滾動條 */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(10, 18, 32, 0.8); }
+        ::-webkit-scrollbar-thumb { background: #1e3a5f; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #00f3ff; box-shadow: 0 0 10px #00f3ff; }
 
         .glass-header {
-            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-            border-bottom: 1px solid rgba(255,255,255,0.1);
+            background: rgba(5, 11, 20, 0.85);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(0, 243, 255, 0.2);
+            box-shadow: 0 4px 30px rgba(0, 243, 255, 0.05);
         }
 
-        .bento-card {
-            background: white;
-            border-radius: 1.5rem;
-            border: 1px solid rgba(226, 232, 240, 0.8);
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.04);
+        /* 戰情室卡片風格 */
+        .cyber-card {
+            background: rgba(10, 18, 32, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(30, 58, 95, 0.8);
+            border-radius: 1rem;
+            box-shadow: inset 0 0 20px rgba(0, 243, 255, 0.02), 0 10px 20px -5px rgba(0, 0, 0, 0.5);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        .cyber-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 2px;
+            background: linear-gradient(90deg, transparent, rgba(0,243,255,0.5), transparent);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .cyber-card:hover::before { opacity: 1; }
+        .cyber-card:hover {
+            border-color: rgba(0, 243, 255, 0.3);
+            box-shadow: inset 0 0 20px rgba(0, 243, 255, 0.05), 0 10px 30px -5px rgba(0, 0, 0, 0.8);
         }
 
+        /* 數據與標籤 */
         .stat-label {
-            font-size: 0.875rem;
-            font-weight: 800;
-            color: #64748b;
-            letter-spacing: 0.05em;
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 0.1em;
             text-transform: uppercase;
+            color: #94a3b8;
         }
 
         .stat-number {
-            font-size: 2.5rem;
-            font-weight: 900;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 2.75rem;
+            font-weight: 800;
             line-height: 1;
-            color: #1e293b;
+            text-shadow: 0 0 15px currentColor;
         }
 
         .upload-area {
-            border: 3px dashed #cbd5e1;
-            background: #f8fafc;
+            border: 2px dashed #1e3a5f;
             cursor: pointer;
             transition: all 0.3s ease;
+            background: rgba(5, 11, 20, 0.5);
+        }
+        .upload-area:hover {
+            border-color: #00f3ff;
+            background: rgba(0, 243, 255, 0.05);
         }
         .upload-area.has-file {
-            border-color: var(--primary);
-            background: #eef2ff;
+            border-color: #00f3ff;
+            border-style: solid;
+            background: rgba(0, 243, 255, 0.05);
+            box-shadow: 0 0 15px rgba(0, 243, 255, 0.1);
         }
 
         /* 圓環圖包裝器 */
@@ -69,218 +129,187 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            height: 300px;
+            height: 280px;
             padding: 5px;
         }
-        .chart-canvas-container-narrow {
-            width: 150px; 
-            height: 150px;
-            position: relative;
-        }
-        .chart-canvas-container-wide {
-            width: 180px; 
-            height: 180px;
-            position: relative;
-        }
+        .chart-canvas-container-narrow { width: 150px; height: 150px; position: relative; }
+        .chart-canvas-container-wide { width: 170px; height: 170px; position: relative; }
         
         .chart-legend-container {
             flex: 1;
-            margin-left: 10px;
+            margin-left: 16px;
             display: grid;
             grid-template-columns: 1fr;
-            gap: 6px;
-            max-height: 280px;
+            gap: 8px;
+            max-height: 260px;
             overflow-y: auto;
+            padding-right: 6px;
         }
 
         .legend-item {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 6px 10px;
-            background: #f8fafc;
-            border-radius: 8px;
-            border: 1px solid #f1f5f9;
+            padding: 8px 12px;
+            background: rgba(30, 58, 95, 0.2);
+            border: 1px solid rgba(30, 58, 95, 0.5);
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+        .legend-item:hover {
+            background: rgba(0, 243, 255, 0.1);
+            border-color: rgba(0, 243, 255, 0.3);
         }
         
-        .legend-color {
-            width: 10px;
-            height: 10px;
-            border-radius: 2px;
-            margin-right: 6px;
-        }
-        
-        .legend-text { font-size: 0.875rem; font-weight: 700; color: #334155; }
-        .percent-text { font-size: 1.05rem; font-weight: 800; }
+        .legend-color { width: 4px; height: 16px; border-radius: 2px; margin-right: 10px; box-shadow: 0 0 8px currentColor; }
+        .percent-text { font-family: 'JetBrains Mono', monospace; font-size: 1rem; font-weight: 800; }
 
-        /* --- 方案一：分日橫向捲軸圖樣式 --- */
-        .day-row {
-            display: flex;
-            align-items: center;
-            margin-bottom: 24px;
-        }
+        /* 時序圖 (Cyberpunk Style) */
+        .day-row { display: flex; align-items: center; margin-bottom: 28px; }
         .day-label {
-            width: 100px;
-            flex-shrink: 0;
-            font-weight: 900;
-            color: #475569;
-            font-size: 14px;
+            width: 110px; flex-shrink: 0;
+            font-family: 'JetBrains Mono', monospace; font-weight: 800; font-size: 14px;
+            color: #00f3ff; text-shadow: 0 0 8px rgba(0,243,255,0.4);
         }
         .timeline-track {
-            flex-grow: 1;
-            height: 40px;
-            background: #f1f5f9;
-            border-radius: 10px;
-            position: relative;
-            overflow: visible;
-            border: 1px solid #e2e8f0;
+            flex-grow: 1; height: 48px; border-radius: 8px; position: relative; overflow: visible;
+            background: rgba(5, 11, 20, 0.8);
+            border: 1px solid #1e3a5f;
+            box-shadow: inset 0 2px 10px rgba(0,0,0,0.5);
         }
 
-        /* 標示日班區間的陰影 (07:30 - 19:30) */
+        /* 日班區域 - 科技網格感 */
         .shift-zone {
-            position: absolute;
-            top: 0; bottom: 0;
-            background: rgba(255, 251, 235, 0.8);
-            border-left: 1px dashed #fcd34d;
-            border-right: 1px dashed #fcd34d;
+            position: absolute; top: 0; bottom: 0;
+            background: repeating-linear-gradient(45deg, rgba(0, 243, 255, 0.02), rgba(0, 243, 255, 0.02) 10px, rgba(0, 243, 255, 0.05) 10px, rgba(0, 243, 255, 0.05) 20px);
+            border-left: 1px dashed rgba(0, 243, 255, 0.3);
+            border-right: 1px dashed rgba(0, 243, 255, 0.3);
             z-index: 0;
         }
 
-        .timeline-grid-v2 {
-            position: absolute;
-            top: 0; bottom: 0;
-            width: 1px;
-            background-color: rgba(100, 116, 139, 0.1);
-            z-index: 1;
-        }
+        .timeline-grid-v2 { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(30, 58, 95, 0.5); z-index: 1; }
         .hour-mark {
-            position: absolute;
-            top: -18px;
-            transform: translateX(-50%);
-            font-size: 10px;
-            color: #94a3b8;
-            font-weight: 700;
+            position: absolute; top: -22px; transform: translateX(-50%);
+            font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700; color: #64748b;
         }
 
+        /* 生產時間區塊 */
         .block-v2 {
-            position: absolute;
-            top: 6px;
-            height: 28px;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: transform 0.1s;
-            z-index: 10;
+            position: absolute; top: 8px; height: 32px; border-radius: 4px; cursor: pointer; transition: all 0.2s; z-index: 10;
         }
         .block-v2:hover {
-            transform: scaleY(1.15);
-            z-index: 50;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            transform: scaleY(1.3) scaleX(1.01); z-index: 50;
+            filter: brightness(1.3);
         }
-        .bg-normal-v2 { background: #6366f1; border: 1px solid #4338ca; }
-        .bg-overlap-v2 { background: #f43f5e; border: 1px solid #be123c; z-index: 20; }
+        /* 正常工時：科技藍發光 */
+        .bg-normal-v2 { 
+            background: linear-gradient(90deg, #0052d4, #4364f7, #6fb1fc); 
+            border: 1px solid #00f3ff; 
+            box-shadow: 0 0 10px rgba(0, 243, 255, 0.5);
+        }
+        /* 異常/重疊：霓虹粉紅發光 */
+        .bg-overlap-v2 { 
+            background: linear-gradient(90deg, #ff007f, #ff0055); 
+            border: 1px solid #ff00ff; z-index: 20;
+            box-shadow: 0 0 12px rgba(255, 0, 127, 0.7);
+        }
 
-        /* Tooltip 樣式 */
+        /* 科技感 Tooltip */
         #custom-tooltip {
-            position: fixed;
-            background: rgba(15, 23, 42, 0.95);
-            color: white;
-            padding: 12px 16px;
-            border-radius: 12px;
-            font-size: 13px;
-            pointer-events: none;
-            z-index: 9999;
-            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3);
-            display: none;
-            backdrop-filter: blur(4px);
-            border: 1px solid rgba(255,255,255,0.1);
+            position: fixed; background: rgba(5, 11, 20, 0.95); color: #e2e8f0;
+            padding: 16px; border-radius: 8px; font-size: 13px; pointer-events: none; z-index: 99999;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8), 0 0 0 1px rgba(0, 243, 255, 0.3);
+            display: none; backdrop-filter: blur(10px); max-width: 320px;
+            font-family: 'Inter', sans-serif;
         }
 
-        .btn-primary {
-            background: var(--primary);
-            color: white;
-            padding: 1.1rem;
-            border-radius: 1rem;
-            font-weight: 800;
-            font-size: 1.1rem;
-            box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.4);
-            transition: all 0.2s;
+        .btn-cyber {
+            background: transparent; color: #00f3ff; border: 1px solid #00f3ff;
+            text-transform: uppercase; letter-spacing: 0.1em; font-weight: 800;
+            transition: all 0.2s; box-shadow: 0 0 10px rgba(0, 243, 255, 0.1) inset;
         }
-        .btn-primary:active { transform: scale(0.98); }
+        .btn-cyber:hover:not(:disabled) {
+            background: rgba(0, 243, 255, 0.1); box-shadow: 0 0 20px rgba(0, 243, 255, 0.4) inset, 0 0 10px rgba(0, 243, 255, 0.4);
+        }
+        .btn-cyber:disabled { border-color: #1e3a5f; color: #475569; box-shadow: none; }
 
-        .data-table th {
-            padding: 1.25rem 1.5rem;
-            background: #f8fafc;
-            border-bottom: 2px solid #e2e8f0;
-            font-size: 0.85rem;
-            font-weight: 900;
-            color: #64748b;
-            text-transform: uppercase;
-            letter-spacing: 0.1em;
-        }
+        /* 表格樣式優化 */
+        .cyber-table th { background: rgba(10, 18, 32, 0.9); border-bottom: 2px solid #1e3a5f; }
+        .cyber-table tr { border-bottom: 1px solid rgba(30, 58, 95, 0.4); transition: all 0.2s; }
+        .cyber-table tr:hover { background: rgba(0, 243, 255, 0.05); }
     </style>
 </head>
 <body class="min-h-screen">
 
     <div id="custom-tooltip"></div>
 
-    <header class="glass-header text-white py-6 px-8 shadow-2xl sticky top-0 z-40">
+    <header class="glass-header py-4 px-8 sticky top-0 z-40">
         <div class="max-w-[1600px] mx-auto flex flex-col md:flex-row justify-between items-center">
             <div class="flex items-center space-x-5">
-                <div class="p-3 bg-indigo-500 rounded-2xl shadow-inner">
-                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <!-- 科技感 Logo -->
+                <div class="p-3 bg-cyber-bg border border-cyber-cyan rounded-xl shadow-[0_0_15px_rgba(0,243,255,0.4)] relative overflow-hidden">
+                    <div class="absolute inset-0 bg-cyber-cyan opacity-10 animate-pulse"></div>
+                    <svg class="w-8 h-8 text-cyber-cyan relative z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 </div>
                 <div>
-                    <h1 class="text-2xl font-black tracking-tight leading-none text-white">工單生產數據分析看板</h1>
-                    <p class="text-indigo-300 text-sm mt-1 font-bold tracking-widest uppercase">Visual Intelligence • Crafted by 勝全 · AI-assisted analytics (MES data)</p>
+                    <h1 class="text-2xl font-black tracking-widest leading-none text-white uppercase drop-shadow-[0_0_8px_rgba(255,255,255,0.3)]">OEE戰情中樞 <span class="text-cyber-cyan font-mono text-sm ml-2">v2.0</span></h1>
+                    <p class="text-cyber-cyan text-[10px] mt-1.5 font-mono tracking-widest uppercase opacity-80">Injection Molding • Analytics Engine</p>
                 </div>
             </div>
-            <div id="status-display" class="hidden mt-4 md:mt-0 flex items-center space-x-3 px-6 py-2 bg-indigo-500/20 border border-indigo-500/30 rounded-full">
-                <span class="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-pulse"></span>
-                <span class="text-sm font-bold" id="status-text">系統準備中...</span>
+            
+            <div class="flex items-center mt-4 md:mt-0">
+                <div id="status-display" class="hidden flex items-center space-x-3 px-5 py-2 bg-cyber-card border border-cyber-cyan/40 rounded-sm shadow-[0_0_10px_rgba(0,243,255,0.2)]">
+                    <span class="w-2 h-2 bg-cyber-cyan rounded-full animate-pulse shadow-[0_0_8px_#00f3ff]"></span>
+                    <span class="text-xs font-mono font-bold text-cyber-cyan tracking-widest uppercase" id="status-text">SYSTEM.READY</span>
+                </div>
             </div>
         </div>
     </header>
 
     <main class="max-w-[1600px] mx-auto px-6 py-8">
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
             <!-- 左側控制欄 -->
-            <aside class="lg:col-span-3 space-y-8">
-                <section class="bento-card p-6">
-                    <h2 class="text-lg font-black text-slate-800 mb-6 flex items-center">
-                        <span class="w-1.5 h-6 bg-indigo-600 mr-3 rounded-full"></span>
-                        數據匯入
+            <aside class="lg:col-span-3 space-y-6">
+                <!-- 上傳區 -->
+                <section class="cyber-card p-6">
+                    <h2 class="text-sm font-black text-white mb-5 flex items-center tracking-widest uppercase">
+                        <svg class="w-4 h-4 text-cyber-cyan mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/></svg>
+                        資料載入 [I/O]
                     </h2>
-                    <label for="file-upload" id="drop-zone" class="upload-area w-full h-48 rounded-2xl flex flex-col items-center justify-center space-y-3 group transition-all text-center px-4">
-                        <div id="upload-icon" class="p-4 bg-white rounded-full shadow-sm group-hover:scale-110 transition-transform">
-                            <svg class="w-10 h-10 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+                    <label for="file-upload" id="drop-zone" class="upload-area w-full h-36 rounded-lg flex flex-col items-center justify-center space-y-3 group text-center px-4">
+                        <div id="upload-icon" class="text-cyber-border group-hover:text-cyber-cyan transition-colors">
+                            <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
                         </div>
                         <div id="file-info-container">
-                            <span id="file-instruction" class="block text-sm font-black text-slate-700">請上傳工單人員記錄表</span>
-                            <span id="file-name-display" class="hidden block text-sm font-black text-indigo-600 break-all bg-indigo-50 px-3 py-1 mt-2 rounded-lg border border-indigo-100 italic">尚未選取檔案</span>
+                            <span id="file-instruction" class="block text-xs font-mono text-slate-400">WAITING_FOR_MES_FILE...</span>
+                            <span id="file-name-display" class="hidden block text-xs font-mono text-cyber-cyan break-all mt-2 drop-shadow-[0_0_5px_rgba(0,243,255,0.5)]"></span>
                         </div>
                         <input type="file" id="file-upload" class="hidden" accept=".csv, .xlsx" onchange="onFileChanged(this)">
                     </label>
-                    <button id="analyze-btn" onclick="triggerProcess()" disabled class="btn-primary w-full mt-6 disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none">啟動深度分析</button>
+                    <button id="analyze-btn" onclick="triggerProcess()" disabled class="btn-cyber w-full mt-5 py-3.5 rounded-lg text-sm cursor-pointer">
+                        INITIALIZE_ANALYSIS
+                    </button>
                 </section>
 
-                <section id="filter-card" class="bento-card p-6 hidden">
-                    <h2 class="text-lg font-black text-slate-800 mb-6 flex items-center">
-                        <span class="w-1.5 h-6 bg-indigo-600 mr-3 rounded-full"></span>
-                        智慧篩選
+                <!-- 篩選區 -->
+                <section id="filter-card" class="cyber-card p-6 hidden">
+                    <h2 class="text-sm font-black text-white mb-5 flex items-center tracking-widest uppercase">
+                        <svg class="w-4 h-4 text-cyber-cyan mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/></svg>
+                        參數過濾 [FILTER]
                     </h2>
                     <div class="space-y-6">
                         <div>
-                            <label class="stat-label block mb-3">分析日期區間</label>
-                            <select id="date-picker" onchange="refreshView()" class="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-4 text-xl font-black text-slate-700 focus:border-indigo-500 outline-none">
-                                <option value="ALL">全部紀錄</option>
+                            <label class="stat-label block mb-2">DATE_RANGE</label>
+                            <select id="date-picker" onchange="refreshView()" class="w-full bg-[#050b14] border border-[#1e3a5f] rounded-lg px-4 py-3 text-sm font-mono text-cyber-cyan focus:border-cyber-cyan outline-none cursor-pointer">
+                                <option value="ALL">ALL_RECORDS</option>
                             </select>
                         </div>
                         <div>
-                            <label class="stat-label block mb-3">廠區篩選</label>
-                            <div class="grid grid-cols-1 gap-3">
-                                <button onclick="setFactoryFilter('ALL')" id="factory-all" class="px-4 py-4 rounded-xl border-2 border-indigo-600 bg-indigo-600 text-white font-black text-lg">全部廠區</button>
-                                <button onclick="setFactoryFilter('G')" id="factory-g" class="px-4 py-4 rounded-xl border-2 border-slate-200 text-slate-600 font-black text-lg">宗瑋 (G)</button>
-                                <button onclick="setFactoryFilter('D')" id="factory-d" class="px-4 py-4 rounded-xl border-2 border-slate-200 text-slate-600 font-black text-lg">博士 (D)</button>
+                            <label class="stat-label block mb-2">FACTORY_ZONE</label>
+                            <div class="grid grid-cols-1 gap-2">
+                                <button onclick="setFactoryFilter('ALL')" id="factory-all" class="px-4 py-2.5 rounded border border-cyber-cyan bg-cyber-cyan/10 text-cyber-cyan font-mono text-xs font-bold shadow-[0_0_10px_rgba(0,243,255,0.2)] transition-all">ZONE: ALL</button>
+                                <button onclick="setFactoryFilter('G')" id="factory-g" class="px-4 py-2.5 rounded border border-[#1e3a5f] text-slate-400 hover:border-cyber-cyan hover:text-cyber-cyan font-mono text-xs font-bold transition-all">ZONE: G (宗瑋)</button>
+                                <button onclick="setFactoryFilter('D')" id="factory-d" class="px-4 py-2.5 rounded border border-[#1e3a5f] text-slate-400 hover:border-cyber-cyan hover:text-cyber-cyan font-mono text-xs font-bold transition-all">ZONE: D (博士)</button>
                             </div>
                         </div>
                     </div>
@@ -288,29 +317,31 @@
             </aside>
 
             <!-- 右側內容區 -->
-            <div class="lg:col-span-9 space-y-8">
-                <!-- 數據卡片區 -->
-                <div id="stats-dashboard" class="grid grid-cols-1 gap-8 hidden">
+            <div class="lg:col-span-9 space-y-6">
+                <!-- KPI 卡片區 -->
+                <div id="stats-dashboard" class="grid grid-cols-1 gap-6 hidden">
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div class="bento-card p-8 bg-indigo-50 border-indigo-100 flex flex-col justify-center">
-                            <p class="stat-label mb-3 text-indigo-600">上工總人數</p>
-                            <div class="flex items-end"><span id="stat-workers" class="stat-number text-indigo-700">0</span><span class="text-xl font-black text-indigo-400 ml-2">人</span></div>
+                        <div class="cyber-card p-6 flex flex-col justify-center border-l-4 border-l-cyber-blue">
+                            <p class="stat-label mb-2">TOTAL_OPERATORS</p>
+                            <div class="flex items-baseline"><span id="stat-workers" class="stat-number text-white">0</span><span class="text-xs font-mono text-cyber-blue ml-2">PRSN</span></div>
                         </div>
-                        <div class="bento-card p-8 bg-rose-50 border-rose-100 flex flex-col justify-center">
-                            <p class="stat-label text-rose-600 mb-3">工時異常人數</p>
-                            <div class="flex items-end"><span id="stat-abnormal" class="stat-number text-rose-700">0</span><span id="stat-ab-perc" class="text-xl font-black text-rose-400 ml-2">0%</span></div>
-                            <p class="text-[10px] text-rose-400 font-bold mt-2 uppercase tracking-tighter">Based on actual working days</p>
+                        
+                        <div class="cyber-card p-6 flex flex-col justify-center border-l-4 border-l-cyber-pink">
+                            <p class="stat-label text-cyber-pink mb-2">ABNORMAL_HOURS</p>
+                            <div class="flex items-baseline"><span id="stat-abnormal" class="stat-number text-cyber-pink">0</span><span id="stat-ab-perc" class="text-sm font-mono text-cyber-pink/70 ml-2">0%</span></div>
+                            <p class="text-[9px] font-mono text-cyber-pink/50 mt-1 uppercase tracking-widest">>> Out of bounds</p>
                         </div>
-                        <div id="card-avg" class="bento-card p-8 bg-emerald-50 border-emerald-100 flex flex-col justify-center transition-colors duration-300">
-                            <p id="label-avg" class="stat-label text-emerald-600 mb-3">人均生產工時</p>
-                            <div class="flex items-end"><span id="stat-avg" class="stat-number text-emerald-700">00:00:00</span><span id="unit-avg" class="text-xl font-black text-emerald-400 ml-2">H/人</span></div>
-                            <p id="note-avg" class="text-[10px] font-black mt-2 opacity-80 text-emerald-500 uppercase tracking-tighter">*Dynamic Benchmarking enabled</p>
+
+                        <div id="card-avg" class="cyber-card p-6 flex flex-col justify-center border-l-4 transition-colors duration-300">
+                            <p id="label-avg" class="stat-label mb-2">AVG_WORK_TIME</p>
+                            <div class="flex items-baseline"><span id="stat-avg" class="stat-number">00:00:00</span><span id="unit-avg" class="text-xs font-mono ml-2">HRS/P</span></div>
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-1 xl:grid-cols-12 gap-8">
-                        <div class="bento-card p-6 xl:col-span-5">
-                            <h3 class="text-lg font-black text-slate-800 mb-4 border-l-6 border-indigo-500 pl-4">廠區人數分佈</h3>
+                    <!-- 圓餅圖區塊 -->
+                    <div class="grid grid-cols-1 xl:grid-cols-12 gap-6">
+                        <div class="cyber-card p-6 xl:col-span-5">
+                            <h3 class="text-xs font-mono font-bold text-slate-300 mb-4 tracking-widest uppercase">>> FACTORY_DISTRIBUTION</h3>
                             <div class="chart-wrapper">
                                 <div class="chart-canvas-container-narrow shrink-0">
                                     <canvas id="chart-factory"></canvas>
@@ -318,8 +349,8 @@
                                 <div id="legend-factory" class="chart-legend-container"></div>
                             </div>
                         </div>
-                        <div class="bento-card p-6 xl:col-span-7">
-                            <h3 class="text-lg font-black text-slate-800 mb-4 border-l-6 border-emerald-500 pl-4">製程人力分配 (Top 10)</h3>
+                        <div class="cyber-card p-6 xl:col-span-7">
+                            <h3 class="text-xs font-mono font-bold text-slate-300 mb-4 tracking-widest uppercase">>> PROCESS_ALLOCATION_TOP10</h3>
                             <div class="chart-wrapper">
                                 <div class="chart-canvas-container-wide shrink-0">
                                     <canvas id="chart-process"></canvas>
@@ -331,24 +362,24 @@
                 </div>
 
                 <!-- 列表顯示區 -->
-                <section id="table-container" class="bento-card hidden overflow-hidden">
-                    <div class="px-8 py-8 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
-                        <h2 class="text-2xl font-black text-slate-800 flex items-center">人員效率分析明細</h2>
-                        <span id="row-count" class="text-md font-black bg-indigo-600 text-white px-5 py-2 rounded-xl"></span>
+                <section id="table-container" class="cyber-card hidden overflow-hidden">
+                    <div class="px-6 py-4 bg-[#050b14]/50 border-b border-[#1e3a5f] flex justify-between items-center">
+                        <h2 class="text-sm font-bold font-mono text-cyber-cyan tracking-widest uppercase"><span class="mr-2 text-white">■</span> EFFICIENCY_MATRIX</h2>
+                        <span id="row-count" class="text-[10px] font-mono border border-cyber-cyan text-cyber-cyan px-2 py-1 rounded shadow-[0_0_5px_rgba(0,243,255,0.3)]"></span>
                     </div>
                     <div class="overflow-x-auto">
-                        <table class="data-table w-full">
+                        <table class="cyber-table w-full text-left text-sm">
                             <thead>
                                 <tr>
-                                    <th class="text-left cursor-pointer" onclick="handleSort(0)">員工代號 <span id="s-0"></span></th>
-                                    <th class="text-left">姓名</th>
-                                    <th class="text-center">模式</th>
-                                    <th class="text-left cursor-pointer" onclick="handleSort(2)">總淨生產工時 <span id="s-2">▼</span></th>
-                                    <th id="th-avg-daily" class="text-left">平均每日工時</th>
-                                    <th class="text-center">累計單數</th>
+                                    <th class="py-4 pl-6 pr-4 text-[10px] font-mono text-slate-400 uppercase tracking-widest cursor-pointer hover:text-cyber-cyan transition-colors" onclick="handleSort(0)">EMP_ID <span id="s-0" class="ml-1"></span></th>
+                                    <th class="py-4 px-4 text-[10px] font-mono text-slate-400 uppercase tracking-widest">NAME</th>
+                                    <th class="py-4 px-4 text-center text-[10px] font-mono text-slate-400 uppercase tracking-widest">SHIFT</th>
+                                    <th class="py-4 px-4 text-[10px] font-mono text-slate-400 uppercase tracking-widest cursor-pointer hover:text-cyber-cyan transition-colors" onclick="handleSort(2)">NET_HOURS <span id="s-2" class="ml-1">▼</span></th>
+                                    <th id="th-avg-daily" class="py-4 px-4 text-[10px] font-mono text-slate-400 uppercase tracking-widest">DAILY_AVG</th>
+                                    <th class="py-4 pr-6 pl-4 text-center text-[10px] font-mono text-slate-400 uppercase tracking-widest">ORDERS</th>
                                 </tr>
                             </thead>
-                            <tbody id="main-table-body" class="bg-white"></tbody>
+                            <tbody id="main-table-body" class="font-mono text-slate-300"></tbody>
                         </table>
                     </div>
                 </section>
@@ -356,57 +387,71 @@
         </div>
     </main>
 
+    <!-- 專屬浮水印 (Cyberpunk 風格適配) -->
+    <div class="fixed bottom-4 right-5 z-[40] pointer-events-none bg-[#050b14]/80 backdrop-blur-md px-4 py-2 rounded-full shadow-[0_0_15px_rgba(0,243,255,0.15)] border border-[#1e3a5f]">
+        <p class="text-[10px] font-mono font-bold text-slate-400 tracking-widest uppercase">
+            Crafted by <span class="font-black text-cyber-cyan drop-shadow-[0_0_5px_#00f3ff] ml-1">勝全</span> <span class="text-cyber-blue ml-1 drop-shadow-[0_0_5px_#3b82f6]">✕ AI</span>
+        </p>
+    </div>
+
     <!-- 人員詳情 Modal -->
-    <div id="modal-backdrop" class="fixed inset-0 bg-slate-900/90 backdrop-blur-xl hidden z-50 flex items-center justify-center p-6" onclick="closeModal()">
-        <div class="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-7xl max-h-[94vh] flex flex-col overflow-hidden" onclick="event.stopPropagation()">
+    <div id="modal-backdrop" class="fixed inset-0 bg-[#050b14]/90 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4 md:p-6 opacity-0 transition-opacity duration-300" onclick="closeModal()">
+        <div class="cyber-card w-full max-w-7xl max-h-[96vh] flex flex-col overflow-hidden transform scale-95 transition-transform duration-300 border-cyber-cyan/50 shadow-[0_0_30px_rgba(0,243,255,0.1)]" onclick="event.stopPropagation()" id="modal-content">
+            
             <!-- Modal Header -->
-            <div class="p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                <div class="flex items-center space-x-6">
-                    <div class="w-20 h-20 bg-indigo-600 rounded-[1.5rem] flex items-center justify-center text-white text-3xl font-black shadow-lg" id="modal-avatar">?</div>
+            <div class="p-6 md:p-8 border-b border-[#1e3a5f] flex justify-between items-start md:items-center bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0IiBoZWlnaHQ9IjQiPjxyZWN0IHdpZHRoPSI0IiBoZWlnaHQ9IjQiIGZpbGw9IiMwYTEyMjAiPjwvcmVjdD48cmVjdCB3aWR0aD0iMSIgaGVpZ2h0PSIxIiBmaWxsPSIjMWUzYTVmIj48L3JlY3Q+PC9zdmc+')] flex-col md:flex-row gap-4 relative">
+                <div class="absolute left-0 top-0 w-1 h-full bg-cyber-cyan shadow-[0_0_10px_#00f3ff]"></div>
+                <div class="flex items-center space-x-5 z-10">
+                    <div class="w-16 h-16 border-2 border-cyber-cyan bg-cyber-bg flex items-center justify-center text-cyber-cyan text-2xl font-black font-mono shadow-[0_0_15px_rgba(0,243,255,0.4)]" id="modal-avatar">?</div>
                     <div>
-                        <div class="flex items-center">
-                            <h3 id="m-name" class="text-3xl font-black text-slate-900 tracking-tight">載入中...</h3>
-                            <span id="m-shift-tag" class="ml-4 px-4 py-1.5 rounded-xl text-xs font-black uppercase shadow-sm"></span>
+                        <div class="flex items-center flex-wrap gap-3">
+                            <h3 id="m-name" class="text-2xl font-black text-white tracking-widest uppercase">LOADING...</h3>
+                            <span id="m-shift-tag" class="px-2 py-0.5 border text-[10px] font-mono font-bold tracking-widest uppercase"></span>
                         </div>
-                        <p id="m-meta" class="text-slate-500 font-bold mt-2 text-lg"></p>
+                        <p id="m-meta" class="text-cyber-cyan/80 font-mono mt-2 text-xs tracking-widest"></p>
                     </div>
                 </div>
-                <button onclick="closeModal()" class="p-4 bg-slate-100 hover:bg-rose-100 hover:text-rose-600 rounded-full transition-all duration-300">
-                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12"/></svg>
+                <button onclick="closeModal()" class="p-2 border border-[#1e3a5f] hover:border-cyber-pink hover:text-cyber-pink bg-cyber-bg transition-colors duration-200 text-slate-500 self-end md:self-auto z-10">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                 </button>
             </div>
 
             <!-- Modal Body -->
-            <div class="p-10 overflow-y-auto space-y-12">
-                <!-- 時序圖區塊 (方案一：分日顯示) -->
+            <div class="p-6 md:p-8 overflow-y-auto space-y-10">
+                <!-- 時序圖區塊 -->
                 <div>
-                    <h4 class="text-xl font-black text-slate-800 mb-8 flex items-center">
-                        <span class="w-2 h-2 bg-indigo-600 rounded-full mr-3"></span>
-                        生產時序分布 (分日視覺化)
-                        <span class="ml-4 text-xs font-bold text-slate-400 bg-slate-100 px-3 py-1 rounded-full">滑鼠懸停區塊可查看細節</span>
+                    <h4 class="text-sm font-mono font-bold text-white mb-6 flex items-center justify-between tracking-widest uppercase">
+                        <div class="flex items-center">
+                            <span class="text-cyber-cyan mr-2">>></span>
+                            TIMELINE_DISTRIBUTION 
+                        </div>
+                        <div class="flex items-center gap-4 text-[10px] text-slate-400">
+                            <div class="flex items-center"><span class="w-3 h-3 bg-cyber-blue shadow-[0_0_8px_#3b82f6] mr-2"></span>NORMAL</div>
+                            <div class="flex items-center"><span class="w-3 h-3 bg-cyber-pink shadow-[0_0_8px_#ff007f] mr-2"></span>OVERLAP_WARN</div>
+                        </div>
                     </h4>
-                    <div id="modal-timeline-v2" class="space-y-2 pt-6">
+                    <div id="modal-timeline-v2" class="space-y-4 pt-4 border-t border-[#1e3a5f]/50">
                         <!-- 由 JS 生成分日橫條 -->
                     </div>
                 </div>
 
                 <!-- 數據表格 -->
-                <div class="space-y-6">
-                    <h4 class="text-xl font-black text-slate-800 flex items-center">
-                        <span class="w-2 h-2 bg-emerald-500 rounded-full mr-3"></span>
-                        工單明細紀錄
+                <div>
+                    <h4 class="text-sm font-mono font-bold text-white mb-4 flex items-center tracking-widest uppercase">
+                        <span class="text-cyber-blue mr-2">>></span>
+                        ORDER_LOGS
                     </h4>
-                    <div class="rounded-3xl border border-slate-100 overflow-hidden">
-                        <table class="w-full">
-                            <thead class="bg-slate-50">
-                                <tr class="text-[11px] font-black text-slate-500 uppercase tracking-widest">
-                                    <th class="px-8 py-5 text-left">製程階段</th>
-                                    <th class="px-8 py-5 text-left">工單單號</th>
-                                    <th class="px-8 py-5 text-left">生產時間區間</th>
-                                    <th class="px-8 py-5 text-right">作業工時</th>
+                    <div class="border border-[#1e3a5f] overflow-hidden bg-cyber-bg/50">
+                        <table class="w-full text-left cyber-table">
+                            <thead>
+                                <tr class="text-[10px] font-mono text-slate-400 uppercase tracking-widest bg-cyber-card">
+                                    <th class="px-6 py-3 border-b border-[#1e3a5f]">PROCESS</th>
+                                    <th class="px-6 py-3 border-b border-[#1e3a5f]">ORDER_ID</th>
+                                    <th class="px-6 py-3 border-b border-[#1e3a5f]">TIME_WINDOW</th>
+                                    <th class="px-6 py-3 border-b border-[#1e3a5f] text-right">DURATION</th>
                                 </tr>
                             </thead>
-                            <tbody id="m-table-body" class="divide-y divide-slate-50 text-slate-700 font-bold text-sm"></tbody>
+                            <tbody id="m-table-body" class="text-slate-300 font-mono text-xs"></tbody>
                         </table>
                     </div>
                 </div>
@@ -415,6 +460,7 @@
     </div>
 
     <script>
+        // --- 核心變數設定 ---
         let rawRecords = [];
         let processedData = {};
         let tableData = [];
@@ -426,7 +472,21 @@
         const ERR_MIN = 8 * 3600 * 1000;
         const ERR_MAX = 14 * 3600 * 1000;
 
-        // Tooltip 控制邏輯
+        // 科技風格圖表配色 (移除了所有的綠色系，替換為冷色系與中性色)
+        const CYBER_COLORS = [
+            '#00f3ff', // 霓虹青
+            '#b026ff', // 雷射紫
+            '#818cf8', // 靛藍
+            '#ff007f', // 霓虹粉
+            '#facc15', // 電光黃
+            '#3b82f6', // 科技藍
+            '#f97316', // 熔岩橘
+            '#6366f1', // 靛青
+            '#ec4899', // 螢光紅
+            '#e2e8f0'  // 銀灰
+        ];
+
+        // --- Tooltip 控制邏輯 ---
         const tooltip = document.getElementById('custom-tooltip');
         function showTooltip(e, content) {
             tooltip.innerHTML = content;
@@ -434,17 +494,27 @@
             updateTooltipPos(e);
         }
         function updateTooltipPos(e) {
-            tooltip.style.left = (e.clientX + 15) + 'px';
-            tooltip.style.top = (e.clientY + 15) + 'px';
+            let x = e.clientX + 15;
+            let y = e.clientY + 15;
+            const tw = tooltip.offsetWidth;
+            const th = tooltip.offsetHeight;
+            if (x + tw > window.innerWidth) x = e.clientX - tw - 15;
+            if (y + th > window.innerHeight) y = e.clientY - th - 15;
+            tooltip.style.left = x + 'px'; tooltip.style.top = y + 'px';
         }
         function hideTooltip() { tooltip.style.display = 'none'; }
 
+        // 初始化 Chart.js 外掛與全域設定
         window.onload = function() {
-            if (typeof Chart !== 'undefined' && typeof ChartDataLabels !== 'undefined') {
-                Chart.register(ChartDataLabels);
+            if (typeof Chart !== 'undefined') {
+                if (typeof ChartDataLabels !== 'undefined') Chart.register(ChartDataLabels);
+                // 覆寫 Chart.js 預設字體為科技字體
+                Chart.defaults.font.family = "'JetBrains Mono', monospace";
+                Chart.defaults.color = '#94a3b8';
             }
         };
 
+        // --- 時間格式化小工具 ---
         function fmtHms(ms) {
             if (isNaN(ms) || ms < 0) return "00:00:00";
             let s = Math.floor(ms / 1000);
@@ -454,12 +524,25 @@
         function fmtHTime(ts) { const d = new Date(ts); return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; }
         function fmtDay(ts) { const d = new Date(ts); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
 
+        // 取得工廠邏輯「歸屬生產日」 (以 07:00 為日切換點)
+        function getLogicalDay(ts) {
+            const d = new Date(ts);
+            const h = d.getHours();
+            if (h < 7) {
+                const prev = new Date(ts);
+                prev.setDate(prev.getDate() - 1);
+                return fmtDay(prev.getTime());
+            }
+            return fmtDay(ts);
+        }
+
         function setStatus(msg) {
             const box = document.getElementById('status-display');
             box.classList.remove('hidden');
             document.getElementById('status-text').innerText = msg;
         }
 
+        // --- 檔案上傳事件 ---
         function onFileChanged(input) {
             const fileName = input.files[0] ? input.files[0].name : "";
             const nameDisplay = document.getElementById('file-name-display');
@@ -467,7 +550,7 @@
             const dropZone = document.getElementById('drop-zone');
 
             if (fileName) {
-                nameDisplay.innerText = fileName;
+                nameDisplay.innerText = `[FILE]: ${fileName}`;
                 nameDisplay.classList.remove('hidden');
                 instruction.classList.add('hidden');
                 dropZone.classList.add('has-file');
@@ -480,38 +563,53 @@
             }
         }
 
+        // --- 解析 Excel ---
         async function triggerProcess() {
-            setStatus("深度分析數據中...");
-            const file = document.getElementById('file-upload').files[0];
-            const reader = new FileReader();
-            reader.onload = async (e) => {
-                const wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
-                rawRecords = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
-                
-                // 處理日期選單
-                const dates = [...new Set(rawRecords.map(r => r[KEYS.START] ? fmtDay(new Date(r[KEYS.START])) : null).filter(Boolean))].sort().reverse();
-                const dp = document.getElementById('date-picker');
-                dp.innerHTML = '<option value="ALL">全部紀錄 (累計)</option>';
-                dates.forEach(d => dp.innerHTML += `<option value="${d}">${d}</option>`);
-                if(dates.length) dp.value = dates[0];
+            setStatus("PARSING_DATA...");
+            const btn = document.getElementById('analyze-btn');
+            btn.innerHTML = '<span class="animate-pulse">PROCESSING_SYS_DATA...</span>';
+            btn.disabled = true;
+            
+            setTimeout(() => {
+                const file = document.getElementById('file-upload').files[0];
+                const reader = new FileReader();
+                reader.onload = async (e) => {
+                    try {
+                        const wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
+                        rawRecords = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+                        
+                        const dates = [...new Set(rawRecords.map(r => r[KEYS.START] ? getLogicalDay(new Date(r[KEYS.START]).getTime()) : null).filter(Boolean))].sort().reverse();
+                        const dp = document.getElementById('date-picker');
+                        dp.innerHTML = '<option value="ALL">ALL_RECORDS (CUMULATIVE)</option>';
+                        dates.forEach(d => dp.innerHTML += `<option value="${d}">${d}</option>`);
+                        if(dates.length) dp.value = dates[0];
 
-                document.getElementById('filter-card').classList.remove('hidden');
-                document.getElementById('stats-dashboard').classList.remove('hidden');
-                document.getElementById('table-container').classList.remove('hidden');
-                refreshView();
-                setStatus("分析報告已更新");
-            };
-            reader.readAsArrayBuffer(file);
+                        document.getElementById('filter-card').classList.remove('hidden');
+                        document.getElementById('stats-dashboard').classList.remove('hidden');
+                        document.getElementById('table-container').classList.remove('hidden');
+                        
+                        refreshView();
+                        setStatus("SYSTEM.READY");
+                    } catch (error) {
+                        alert("Data Error: 檔案解析失敗。");
+                        setStatus("SYS.ERROR");
+                    } finally {
+                        btn.innerText = 'RECALCULATE_DATA';
+                        btn.disabled = false;
+                    }
+                };
+                reader.readAsArrayBuffer(file);
+            }, 300);
         }
 
-        // 計算日班區間內的工時 (07:30 - 19:30) 用於判斷班別
+        // --- 計算日班區間內的工時 (07:00 - 19:00) ---
         function getDayShiftMs(start, end) {
             let total = 0;
             let cur = new Date(start);
             const targetEnd = new Date(end);
             while (cur < targetEnd) {
-                let dStart = new Date(cur); dStart.setHours(7, 30, 0, 0);
-                let dEnd = new Date(cur); dEnd.setHours(19, 30, 0, 0);
+                let dStart = new Date(cur); dStart.setHours(7, 0, 0, 0); 
+                let dEnd = new Date(cur); dEnd.setHours(19, 0, 0, 0); 
                 let oS = Math.max(cur.getTime(), dStart.getTime());
                 let oE = Math.min(targetEnd.getTime(), dEnd.getTime());
                 if (oE > oS) total += (oE - oS);
@@ -521,9 +619,11 @@
             return total;
         }
 
+        // --- 資料運算與重整 ---
         function refreshView() {
+            if(rawRecords.length === 0) return;
             const filterDate = document.getElementById('date-picker').value;
-            let targetRecords = filterDate === 'ALL' ? rawRecords : rawRecords.filter(r => fmtDay(new Date(r[KEYS.START])) === filterDate);
+            let targetRecords = filterDate === 'ALL' ? rawRecords : rawRecords.filter(r => getLogicalDay(new Date(r[KEYS.START]).getTime()) === filterDate);
             
             processedData = {};
             const opMap = {};
@@ -538,7 +638,8 @@
                 opMap[id].raw.push(r);
                 opMap[id].min = Math.min(opMap[id].min, start);
                 opMap[id].max = Math.max(opMap[id].max, end);
-                opMap[id].dates.add(fmtDay(new Date(r[KEYS.START])));
+                
+                opMap[id].dates.add(getLogicalDay(start));
 
                 if(!processUsers[proc]) processUsers[proc] = new Set();
                 processUsers[proc].add(id);
@@ -558,7 +659,6 @@
 
                 const shift = (totalDayMs >= (totalWorkMs * 0.5)) ? 'DAY' : 'NIGHT';
 
-                // 計算重疊塊
                 let overlapCheck = [], sortedPoints = [];
                 data.intervals.forEach(i => { 
                     sortedPoints.push({time: i.start, type: 1, info: i}); 
@@ -570,19 +670,13 @@
                 let activeIntervals = new Set();
                 for(let p of sortedPoints) {
                     if(active > 0 && currentStart !== null && p.time > currentStart) {
-                        overlapCheck.push({
-                            start: currentStart, 
-                            end: p.time, 
-                            count: active,
-                            details: Array.from(activeIntervals)
-                        });
+                        overlapCheck.push({ start: currentStart, end: p.time, count: active, details: Array.from(activeIntervals) });
                     }
                     if (p.type === 1) { active++; activeIntervals.add(p.info); }
                     else { active--; activeIntervals.delete(p.info); }
                     currentStart = p.time;
                 }
 
-                // 計算淨生產工時 (扣除重疊後的連續段)
                 let netTotal = 0;
                 if(data.intervals.length) {
                     let s = data.intervals[0].start, e = data.intervals[0].end;
@@ -603,6 +697,7 @@
             renderView();
         }
 
+        // --- 渲染圖表與卡片 ---
         function renderDashboard(processUsers) {
             let filtered = tableData.filter(d => {
                 if (currentFactory === 'G') return String(d.id).startsWith('G');
@@ -626,21 +721,29 @@
             document.getElementById('stat-avg').innerText = fmtHms(avgMs);
             const avgDays = filtered.length ? totalDaysAccumulated / filtered.length : 1;
 
-            // 調整卡片顏色
             const card = document.getElementById('card-avg');
+            const label = document.getElementById('label-avg');
+            const stat = document.getElementById('stat-avg');
+            const unit = document.getElementById('unit-avg');
+            
+            card.classList.remove('border-l-[#facc15]', 'border-l-cyber-pink', 'border-l-cyber-blue');
+            label.classList.remove('text-[#facc15]', 'text-cyber-pink', 'text-cyber-blue');
+            stat.classList.remove('text-[#facc15]', 'text-cyber-pink', 'text-cyber-blue');
+            unit.classList.remove('text-[#facc15]/70', 'text-cyber-pink/70', 'text-cyber-blue/70');
+
             if (avgMs < ERR_MIN * avgDays) {
-                card.className = 'bento-card p-8 bg-amber-50 border-amber-100 flex flex-col justify-center transition-all';
+                card.classList.add('border-l-[#facc15]'); label.classList.add('text-[#facc15]'); stat.classList.add('text-[#facc15]'); unit.classList.add('text-[#facc15]/70');
             } else if (avgMs > ERR_MAX * avgDays) {
-                card.className = 'bento-card p-8 bg-rose-50 border-rose-100 flex flex-col justify-center transition-all';
+                card.classList.add('border-l-cyber-pink'); label.classList.add('text-cyber-pink'); stat.classList.add('text-cyber-pink'); unit.classList.add('text-cyber-pink/70');
             } else {
-                card.className = 'bento-card p-8 bg-emerald-50 border-emerald-100 flex flex-col justify-center transition-all';
+                card.classList.add('border-l-cyber-blue'); label.classList.add('text-cyber-blue'); stat.classList.add('text-cyber-blue'); unit.classList.add('text-cyber-blue/70');
             }
             
-            updateChartWithLegend('chart-factory', 'legend-factory', ['宗瑋 (G)', '博士 (D)'], [gCount, dCount], ['#6366f1', '#f43f5e']);
+            updateChartWithLegend('chart-factory', 'legend-factory', ['ZONE: G', 'ZONE: D'], [gCount, dCount], [CYBER_COLORS[0], CYBER_COLORS[3]]);
 
             const sortedProc = Object.entries(processUsers).map(([k,v]) => [k, v.size]).sort((a,b) => b[1]-a[1]);
             const topProc = sortedProc.slice(0, 10);
-            updateChartWithLegend('chart-process', 'legend-process', topProc.map(p=>p[0]), topProc.map(p=>p[1]), ['#10b981', '#6366f1', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4', '#f97316', '#84cc16', '#a855f7', '#94a3b8']);
+            updateChartWithLegend('chart-process', 'legend-process', topProc.map(p=>p[0]), topProc.map(p=>p[1]), CYBER_COLORS.slice(0, topProc.length));
         }
 
         function updateChartWithLegend(canvasId, legendId, labels, data, colors) {
@@ -648,16 +751,21 @@
             const total = data.reduce((a, b) => a + b, 0);
             const ctx = document.getElementById(canvasId).getContext('2d');
             charts[canvasId] = new Chart(ctx, {
-                type: 'doughnut', data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 2, borderColor: '#fff' }] },
-                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, datalabels: { display: false } }, cutout: '75%' }
+                type: 'doughnut', 
+                data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 2, borderColor: '#050b14', hoverOffset: 4 }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, cutout: '78%' }
             });
             const legendContainer = document.getElementById(legendId); legendContainer.innerHTML = '';
             labels.forEach((label, i) => {
                 const percent = total > 0 ? ((data[i]/total)*100).toFixed(1) : 0;
-                legendContainer.innerHTML += `<div class="legend-item"><div class="flex items-center"><div class="legend-color" style="background:${colors[i]}"></div><span class="legend-text">${label}</span></div><span class="percent-text">${percent}%</span></div>`;
+                legendContainer.innerHTML += `<div class="legend-item">
+                    <div class="flex items-center"><div class="legend-color" style="background:${colors[i]}; color:${colors[i]}"></div><span class="text-[10px] font-mono font-bold text-slate-300 uppercase">${label}</span></div>
+                    <span class="percent-text text-white drop-shadow-[0_0_5px_rgba(255,255,255,0.5)]">${percent}%</span>
+                </div>`;
             });
         }
 
+        // --- 渲染表格 ---
         function renderView() {
             let filtered = tableData.filter(d => {
                 if (currentFactory === 'G') return String(d.id).startsWith('G');
@@ -670,6 +778,9 @@
                 return currentSort.dir === 'asc' ? (v1 > v2 ? 1 : -1) : (v1 < v2 ? 1 : -1);
             });
 
+            document.getElementById('s-0').innerText = currentSort.col === 0 ? (currentSort.dir === 'asc' ? '▲' : '▼') : '';
+            document.getElementById('s-2').innerText = currentSort.col === 2 ? (currentSort.dir === 'asc' ? '▲' : '▼') : '';
+
             const filterDate = document.getElementById('date-picker').value;
             const isAll = filterDate === 'ALL';
             document.getElementById('th-avg-daily').style.display = isAll ? 'table-cell' : 'none';
@@ -677,24 +788,29 @@
             const tbody = document.getElementById('main-table-body');
             tbody.innerHTML = '';
             filtered.forEach(d => {
-                let badgeClass = "bg-emerald-100 text-emerald-700";
-                if (d.totalMs < ERR_MIN * d.dayCount) badgeClass = "bg-amber-100 text-amber-700";
-                else if (d.totalMs > ERR_MAX * d.dayCount) badgeClass = "bg-rose-100 text-rose-700";
+                let badgeClass = "text-cyber-blue border-cyber-blue/50 shadow-[0_0_8px_rgba(59,130,246,0.2)]";
+                if (d.totalMs < ERR_MIN * d.dayCount) badgeClass = "text-[#facc15] border-[#facc15]/50 shadow-[0_0_8px_rgba(250,204,21,0.2)]";
+                else if (d.totalMs > ERR_MAX * d.dayCount) badgeClass = "text-cyber-pink border-cyber-pink/50 shadow-[0_0_8px_rgba(255,0,127,0.2)]";
 
                 const tr = document.createElement('tr');
-                tr.className = "hover:bg-indigo-50/70 cursor-pointer group transition-colors border-b border-slate-50";
+                tr.className = "cursor-pointer group";
                 tr.onclick = () => openDetails(d.id);
+                
+                const shiftTag = d.shift === 'DAY' 
+                    ? '<span class="px-2 py-0.5 border border-[#facc15] text-[#facc15] text-[10px] rounded shadow-[0_0_5px_rgba(250,204,21,0.3)]">DAY</span>'
+                    : '<span class="px-2 py-0.5 border border-cyber-cyan text-cyber-cyan text-[10px] rounded shadow-[0_0_5px_rgba(0,243,255,0.3)]">NIGHT</span>';
+
                 tr.innerHTML = `
-                    <td class="font-black text-slate-900 py-5 pl-8">${d.id}</td>
-                    <td class="font-bold text-slate-500">${d.name}</td>
-                    <td class="text-center"><span class="text-[10px] font-black px-3 py-1 rounded-lg ${d.shift==='DAY'?'bg-amber-100 text-amber-700':'bg-slate-800 text-white'}">${d.shift==='DAY'?'日班':'夜班'}</span></td>
-                    <td><span class="px-5 py-2 rounded-xl font-black ${badgeClass}">${fmtHms(d.totalMs)}</span></td>
-                    <td style="display:${isAll?'table-cell':'none'}" class="font-bold text-slate-400">${fmtHms(d.totalMs/d.dayCount)}</td>
-                    <td class="text-center font-black text-slate-300 text-lg">${d.count}</td>
+                    <td class="py-4 pl-6 pr-4 font-bold text-cyber-cyan drop-shadow-[0_0_3px_#00f3ff] group-hover:text-white">${d.id}</td>
+                    <td class="px-4 text-white">${d.name}</td>
+                    <td class="text-center px-4">${shiftTag}</td>
+                    <td class="px-4"><span class="px-2 py-1 border rounded bg-[#0a1220] ${badgeClass}">${fmtHms(d.totalMs)}</span></td>
+                    <td style="display:${isAll?'table-cell':'none'}" class="px-4 text-slate-400">${fmtHms(d.totalMs/d.dayCount)}</td>
+                    <td class="text-center px-4 pr-6 text-cyber-blue drop-shadow-[0_0_3px_#3b82f6]">${d.count}</td>
                 `;
                 tbody.appendChild(tr);
             });
-            document.getElementById('row-count').innerText = `已顯示 ${filtered.length} 人`;
+            document.getElementById('row-count').innerText = `SHOWING: ${filtered.length}`;
         }
 
         function handleSort(col) {
@@ -706,34 +822,55 @@
         function setFactoryFilter(f) {
             currentFactory = f;
             ['ALL','G','D'].forEach(t => {
-                document.getElementById(`factory-${t.toLowerCase()}`).className = (t === f) ? "px-4 py-4 rounded-xl border-2 border-indigo-600 bg-indigo-600 text-white font-black text-lg" : "px-4 py-4 rounded-xl border-2 border-slate-200 text-slate-600 font-black text-lg";
+                const btn = document.getElementById(`factory-${t.toLowerCase()}`);
+                if (t === f) {
+                    btn.className = "px-4 py-2.5 rounded border border-cyber-cyan bg-cyber-cyan/10 text-cyber-cyan font-mono text-xs font-bold shadow-[0_0_10px_rgba(0,243,255,0.2)] transition-all";
+                } else {
+                    btn.className = "px-4 py-2.5 rounded border border-[#1e3a5f] text-slate-400 hover:border-cyber-cyan hover:text-cyber-cyan font-mono text-xs font-bold transition-all";
+                }
             });
             refreshView(); 
         }
 
+        // --- 開啟 Modal (修復跨日圖表核心區) ---
         function openDetails(id) {
             const data = processedData[id];
             document.getElementById('modal-avatar').innerText = data.name.charAt(0);
             document.getElementById('m-name').innerText = `${data.id} ${data.name}`;
-            const shiftTag = document.getElementById('m-shift-tag');
-            shiftTag.innerText = data.shift === 'DAY' ? 'Day Shift Mode' : 'Night Shift Mode';
-            shiftTag.className = data.shift === 'DAY' ? 'ml-4 px-3 py-1 rounded-lg text-xs font-black bg-amber-100 text-amber-600' : 'ml-4 px-3 py-1 rounded-lg text-xs font-black bg-slate-900 text-white';
-            document.getElementById('m-meta').innerText = `總淨工時：${fmtHms(data.totalMs)} | 出勤天數：${data.dayCount} 天 | 總工單量：${data.count} 筆`;
             
-            // --- 方案一：分日橫向時序圖 ---
+            const shiftTag = document.getElementById('m-shift-tag');
+            if(data.shift === 'DAY') {
+                shiftTag.innerText = 'DAY_SHIFT';
+                shiftTag.className = 'px-2 py-0.5 border border-[#facc15] text-[#facc15] text-[10px] rounded shadow-[0_0_5px_rgba(250,204,21,0.3)] bg-[#facc15]/10 font-mono font-bold tracking-widest uppercase';
+            } else {
+                shiftTag.innerText = 'NIGHT_SHIFT';
+                shiftTag.className = 'px-2 py-0.5 border border-cyber-cyan text-cyber-cyan text-[10px] rounded shadow-[0_0_5px_rgba(0,243,255,0.3)] bg-cyber-cyan/10 font-mono font-bold tracking-widest uppercase';
+            }
+            
+            document.getElementById('m-meta').innerText = `NET_HRS: ${fmtHms(data.totalMs)} // LOGICAL_DAYS: ${data.dayCount} // TOTAL_ORDERS: ${data.count}`;
+            
             const container = document.getElementById('modal-timeline-v2');
             container.innerHTML = '';
 
-            // 按日期分組 blocks
-            const blocksByDate = {};
+            const visualBlocksByDate = {};
+            
             data.overlapBlocks.forEach(b => {
-                const day = fmtDay(new Date(b.start));
-                if (!blocksByDate[day]) blocksByDate[day] = [];
-                blocksByDate[day].push(b);
+                let currentStart = b.start;
+                const finalEnd = b.end;
+
+                while (currentStart < finalEnd) {
+                    const startDayStr = fmtDay(currentStart);
+                    const dayEndTs = new Date(startDayStr + "T23:59:59.999").getTime();
+                    const currentEnd = Math.min(finalEnd, dayEndTs + 1); 
+
+                    if (!visualBlocksByDate[startDayStr]) visualBlocksByDate[startDayStr] = [];
+
+                    visualBlocksByDate[startDayStr].push({ ...b, visualStart: currentStart, visualEnd: currentEnd });
+                    currentStart = currentEnd; 
+                }
             });
 
-            // 排序日期 (由新到舊)
-            const sortedDays = Object.keys(blocksByDate).sort().reverse();
+            const sortedDays = Object.keys(visualBlocksByDate).sort().reverse();
             const msPerDay = 24 * 3600 * 1000;
 
             sortedDays.forEach(dayStr => {
@@ -742,19 +879,18 @@
                 
                 const label = document.createElement('div');
                 label.className = "day-label";
-                label.innerText = dayStr.split('-').slice(1).join('/'); // 顯示 01/19 格式
+                label.innerText = dayStr.split('-').slice(1).join('/'); // 01/19
                 
                 const track = document.createElement('div');
                 track.className = "timeline-track";
 
-                // 背景：日班標示 (07:30 - 19:30)
+                // 背景：日班標示 (07:00 - 19:00)
                 const shiftZone = document.createElement('div');
                 shiftZone.className = "shift-zone";
-                shiftZone.style.left = (7.5 / 24 * 100) + '%';
+                shiftZone.style.left = (7 / 24 * 100) + '%'; 
                 shiftZone.style.width = (12 / 24 * 100) + '%';
                 track.appendChild(shiftZone);
 
-                // 時間刻度 (每 4 小時一格)
                 for(let h=0; h<=24; h+=4) {
                     const grid = document.createElement('div');
                     grid.className = "timeline-grid-v2";
@@ -768,31 +904,31 @@
                     track.appendChild(grid);
                 }
 
-                // 渲染當日區塊
                 const dayStartTs = new Date(dayStr + "T00:00:00").getTime();
-                blocksByDate[dayStr].forEach(b => {
+                
+                visualBlocksByDate[dayStr].forEach(b => {
                     const block = document.createElement('div');
                     const isOverlap = b.count > 1;
                     block.className = `block-v2 ${isOverlap ? 'bg-overlap-v2' : 'bg-normal-v2'}`;
                     
-                    // 計算相對當天 0 點的百分比
-                    const startOffset = Math.max(0, b.start - dayStartTs);
-                    const duration = b.end - b.start;
+                    const startOffset = Math.max(0, b.visualStart - dayStartTs);
+                    const duration = b.visualEnd - b.visualStart;
                     
                     block.style.left = (startOffset / msPerDay * 100) + '%';
-                    block.style.width = Math.max(0.4, (duration / msPerDay * 100)) + '%';
+                    block.style.width = Math.max(0.2, (duration / msPerDay * 100)) + '%';
                     
-                    // Tooltip 內容預處理
                     const detailHtml = b.details.map(d => `
-                        <div class="border-b border-white/10 pb-2 mb-2 last:border-0 last:mb-0">
-                            <div class="text-indigo-400 font-black">${d.order}</div>
-                            <div class="text-[11px] opacity-70">${d.proc}</div>
-                            <div class="text-[10px] mt-1 text-slate-300">${fmtHTime(d.start)} - ${fmtHTime(d.end)}</div>
+                        <div class="border-b border-cyber-cyan/20 pb-2 mb-2 last:border-0 last:mb-0">
+                            <div class="text-cyber-cyan font-bold tracking-wider">${d.order}</div>
+                            <div class="text-[10px] text-slate-400 mt-0.5">${d.proc}</div>
+                            <div class="text-[10px] text-cyber-blue mt-1">${fmtDt(d.start)} -> ${fmtDt(d.end)}</div>
                         </div>
                     `).join('');
 
                     block.onmouseenter = (e) => showTooltip(e, `
-                        <div class="font-black text-rose-400 mb-2">${isOverlap ? '⚠️ 工時重疊 (同時執行多單)' : '✓ 正常生產'}</div>
+                        <div class="font-bold font-mono tracking-widest uppercase ${isOverlap ? 'text-cyber-pink drop-shadow-[0_0_5px_#ff007f]' : 'text-cyber-blue drop-shadow-[0_0_5px_#3b82f6]'} mb-3 flex items-center border-b border-white/10 pb-2">
+                            ${isOverlap ? '[WARN] OVERLAP_DETECTED' : '[OK] STATUS_NORMAL'}
+                        </div>
                         ${detailHtml}
                     `);
                     block.onmousemove = (e) => updateTooltipPos(e);
@@ -806,24 +942,33 @@
                 container.appendChild(dayRow);
             });
 
-            // 明細表格
             const mtbody = document.getElementById('m-table-body');
             mtbody.innerHTML = '';
             data.raw.sort((a,b) => new Date(a[KEYS.START]) - new Date(b[KEYS.START])).forEach(r => {
                 const s = new Date(r[KEYS.START]), e = new Date(r[KEYS.END]);
-                mtbody.innerHTML += `<tr class="hover:bg-slate-50 transition-colors">
-                    <td class="px-8 py-4 text-slate-800">${r[KEYS.PROC]}</td>
-                    <td class="px-8 py-4 text-indigo-700 font-black">${r[KEYS.ORDER]}</td>
-                    <td class="px-8 py-4 text-slate-400 text-xs font-bold">${fmtDt(s)} - ${fmtDt(e)}</td>
-                    <td class="px-8 py-4 text-right font-black text-slate-900">${fmtHms(e-s)}</td>
+                mtbody.innerHTML += `<tr>
+                    <td class="px-6 py-3 border-b border-[#1e3a5f]/40 text-slate-400">${r[KEYS.PROC]}</td>
+                    <td class="px-6 py-3 border-b border-[#1e3a5f]/40 text-cyber-cyan font-bold drop-shadow-[0_0_2px_#00f3ff]">${r[KEYS.ORDER]}</td>
+                    <td class="px-6 py-3 border-b border-[#1e3a5f]/40 text-cyber-blue/80 text-xs">${fmtDt(s)} - ${fmtDt(e)}</td>
+                    <td class="px-6 py-3 border-b border-[#1e3a5f]/40 text-right text-white">${fmtHms(e-s)}</td>
                 </tr>`;
             });
-            document.getElementById('modal-backdrop').classList.remove('hidden');
+            
+            const backdrop = document.getElementById('modal-backdrop');
+            const content = document.getElementById('modal-content');
+            backdrop.classList.remove('hidden');
+            void backdrop.offsetWidth; 
+            backdrop.classList.remove('opacity-0');
+            content.classList.remove('scale-95');
         }
 
         function closeModal() { 
-            document.getElementById('modal-backdrop').classList.add('hidden'); 
+            const backdrop = document.getElementById('modal-backdrop');
+            const content = document.getElementById('modal-content');
+            backdrop.classList.add('opacity-0');
+            content.classList.add('scale-95');
             hideTooltip();
+            setTimeout(() => backdrop.classList.add('hidden'), 300);
         }
     </script>
 </body>
