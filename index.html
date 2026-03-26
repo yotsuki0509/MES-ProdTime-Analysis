@@ -739,7 +739,7 @@
                 card.classList.add('border-l-cyber-blue'); label.classList.add('text-cyber-blue'); stat.classList.add('text-cyber-blue'); unit.classList.add('text-cyber-blue/70');
             }
             
-            updateChartWithLegend('chart-factory', 'legend-factory', ['ZONE: G', 'ZONE: D'], [gCount, dCount], [CYBER_COLORS[0], CYBER_COLORS[3]]);
+            updateChartWithLegend('chart-factory', 'legend-factory', ['ZONE: 宗瑋', 'ZONE: 博士'], [gCount, dCount], [CYBER_COLORS[0], CYBER_COLORS[3]]);
 
             const sortedProc = Object.entries(processUsers).map(([k,v]) => [k, v.size]).sort((a,b) => b[1]-a[1]);
             const topProc = sortedProc.slice(0, 10);
